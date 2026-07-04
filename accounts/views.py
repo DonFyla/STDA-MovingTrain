@@ -90,7 +90,7 @@ def dashboard_view(request):
         return redirect("scheduling:coach_dashboard")
 
     # Student dashboard
-    from scheduling.models import Booking, FlexibleBooking
+    from scheduling.models import Booking, FlexibleBooking, SpecialBooking
     from quiz.models import Qtaker
     from payments.points_service import get_balance
 
@@ -98,6 +98,9 @@ def dashboard_view(request):
     pending_bookings = bookings.filter(status="pending")
     confirmed_bookings = bookings.filter(status="confirmed")
     rejected_bookings = bookings.filter(status="rejected")
+
+    special_bookings = SpecialBooking.objects.filter(student=user).order_by("-created_at")
+    pending_special_bookings = special_bookings.filter(status="pending_payment")
 
     flexible_bookings = FlexibleBooking.objects.filter(user=user).order_by("-session_date", "-start_time")
     upcoming_flexible = flexible_bookings.filter(session_date__gte=today, status__in=["confirmed", "completed"])
@@ -140,6 +143,8 @@ def dashboard_view(request):
         "pending_bookings": pending_bookings,
         "confirmed_bookings": confirmed_bookings,
         "rejected_bookings": rejected_bookings,
+        "special_bookings": special_bookings,
+        "pending_special_bookings": pending_special_bookings,
         "flexible_bookings": flexible_bookings,
         "past_flexible": past_flexible,
         "cancelled_flexible": cancelled_flexible,

@@ -501,6 +501,92 @@ def book_coach_view(request, coach_id):
 
 
 @login_required
+def retry_booking_payment_view(request, booking_id):
+    from scheduling.models import Booking
+    from payments.paystack_service import initialize_transaction
+
+    booking = get_object_or_404(Booking, id=booking_id, student_email=request.user.email)
+
+    if booking.payment_status == "paid" or booking.status != "pending":
+        messages.info(request, "This booking is already paid or no longer pending.")
+        return redirect("accounts:dashboard")
+
+    if not booking.payment_reference:
+        booking.payment_reference = generate_reference(prefix="BK")
+        booking.save(update_fields=["payment_reference"])
+
+    callback_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+    result = initialize_transaction(
+        email=booking.student_email,
+        amount_kobo=int(booking.monthly_amount * 100),
+        reference=booking.payment_reference,
+        callback_url=callback_url,
+        metadata={
+            "booking_id": str(booking.id),
+            "type": "recurring_booking",
+            "coach_id": str(booking.coach.id),
+            "amount": str(booking.monthly_amount),
+        },
+    )
+
+    if result["success"]:
+        return render(request, "scheduling/booking_payment.html", {
+            "booking": booking,
+            "payment_reference": booking.payment_reference,
+            "authorization_url": result["authorization_url"],
+            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+        })
+    else:
+        messages.error(request, f"Could not start payment: {result['message']}")
+        return redirect("accounts:dashboard")
+
+
+@login_required
+def retry_special_payment_view(request, booking_id):
+    from scheduling.models import SpecialBooking
+    from payments.paystack_service import initialize_transaction
+
+    booking = get_object_or_404(
+        SpecialBooking,
+        id=booking_id,
+        student=request.user,
+    )
+
+    if booking.payment_status == "paid" or booking.status != "pending_payment":
+        messages.info(request, "This booking is already paid or no longer pending payment.")
+        return redirect("accounts:dashboard")
+
+    if not booking.payment_reference:
+        booking.payment_reference = generate_reference(prefix="SP")
+        booking.save(update_fields=["payment_reference"])
+
+    callback_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
+    result = initialize_transaction(
+        email=booking.student_email,
+        amount_kobo=int(booking.total_amount * 100),
+        reference=booking.payment_reference,
+        callback_url=callback_url,
+        metadata={
+            "booking_id": str(booking.id),
+            "type": "special_booking",
+            "coach_id": str(booking.coach.id),
+            "amount": str(booking.total_amount),
+        },
+    )
+
+    if result["success"]:
+        return render(request, "scheduling/special_booking_payment.html", {
+            "booking": booking,
+            "payment_reference": booking.payment_reference,
+            "authorization_url": result["authorization_url"],
+            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+        })
+    else:
+        messages.error(request, f"Could not start payment: {result['message']}")
+        return redirect("accounts:dashboard")
+
+
+@login_required
 def booking_confirmation_view(request, booking_id):
     from .models import Booking
     booking = get_object_or_404(Booking, id=booking_id)

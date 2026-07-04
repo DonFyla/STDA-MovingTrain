@@ -3,6 +3,9 @@ import os
 # Set a test-only secret key before importing base settings, which require one.
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 
+# Force SQLite for tests so a PostgreSQL client is not required locally.
+os.environ["DATABASE_URL"] = ""
+
 from .settings import *  # noqa: F401,F403
 
 # Use local-memory cache for tests so Redis is not required.
