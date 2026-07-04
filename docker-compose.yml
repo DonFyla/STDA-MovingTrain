@@ -27,9 +27,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DEBUG=True
-      - SECRET_KEY=local-dev-secret-key
-      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-local-dev-secret-key}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - DATABASE_URL=postgres://user:password@db:5432/chess_academy
       - REDIS_URL=redis://redis:6379/0
     depends_on:

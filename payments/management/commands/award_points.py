@@ -44,6 +44,7 @@ class Command(BaseCommand):
             amount,
             description=reason,
             payment_reference=reference,
+            transaction_type="bonus",
         )
 
         self.stdout.write(

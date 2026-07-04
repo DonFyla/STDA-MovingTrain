@@ -51,6 +51,15 @@ class QuizTemplateTests(TestCase):
             question=self.intermediate_question, text="A special pawn move", correct=False
         )
 
+    def _allow_access(self, qtaker):
+        """Simulate session ownership for anonymous quiz attempts in tests."""
+        session = self.client.session
+        session_ids = session.get("quiz_qtaker_ids", [])
+        if qtaker.id not in session_ids:
+            session_ids.append(qtaker.id)
+            session["quiz_qtaker_ids"] = session_ids
+            session.save()
+
     def test_register_page_renders(self):
         response = self.client.get(reverse("quiz:register"))
         self.assertEqual(response.status_code, 200)
@@ -69,6 +78,7 @@ class QuizTemplateTests(TestCase):
         )
         qtaker.current_question_set = [self.beginner_question.id]
         qtaker.save()
+        self._allow_access(qtaker)
 
         response = self.client.get(
             reverse("quiz:question", args=[qtaker.id, self.beginner_question.id])
@@ -83,6 +93,7 @@ class QuizTemplateTests(TestCase):
         )
         qtaker.current_question_set = [self.beginner_question.id]
         qtaker.save()
+        self._allow_access(qtaker)
 
         response = self.client.post(
             reverse("quiz:question", args=[qtaker.id, self.beginner_question.id]),
@@ -100,6 +111,7 @@ class QuizTemplateTests(TestCase):
         qtaker.last_question_id = self.beginner_question.id
         qtaker.last_answer_id = self.correct_option.id
         qtaker.save()
+        self._allow_access(qtaker)
 
         response = self.client.get(
             reverse("quiz:answer", args=[qtaker.id, self.correct_option.id])
@@ -127,6 +139,7 @@ class QuizTemplateTests(TestCase):
         )
         qtaker.current_question_set = [text_question.id]
         qtaker.save()
+        self._allow_access(qtaker)
 
         response = self.client.post(
             reverse("quiz:question", args=[qtaker.id, text_question.id]),
@@ -146,6 +159,7 @@ class QuizTemplateTests(TestCase):
         qtaker.current_question_set = [self.beginner_question.id]
         qtaker.current_score = 1
         qtaker.save()
+        self._allow_access(qtaker)
 
         response = self.client.get(reverse("quiz:result", args=[qtaker.id]))
         self.assertEqual(response.status_code, 200)
@@ -162,6 +176,7 @@ class QuizTemplateTests(TestCase):
         qtaker.current_question_set = [self.beginner_question.id]
         qtaker.current_score = 1
         qtaker.save()
+        self._allow_access(qtaker)
 
         # View result page — this should set next_question_set to intermediate
         response = self.client.get(reverse("quiz:result", args=[qtaker.id]))

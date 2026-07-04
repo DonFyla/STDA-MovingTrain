@@ -7,7 +7,6 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .models import PointTransaction
-from .points_service import add_points
 from .paystack_service import verify_transaction
 
 
@@ -20,7 +19,7 @@ def paystack_webhook_view(request):
     """
     secret_key = settings.PAYSTACK_SECRET_KEY
     if not secret_key:
-        return JsonResponse({"status": "error", "message": "Paystack not configured"}, status=500)
+        return JsonResponse({"status": "error", "message": "Paystack not configured"}, status=503)
 
     # Verify signature
     signature = request.headers.get("x-paystack-signature", "")
@@ -49,14 +48,8 @@ def paystack_webhook_view(request):
             # 1. Try points purchase
             try:
                 tx = PointTransaction.objects.get(payment_reference=reference, status="pending")
-                add_points(
-                    tx.user,
-                    tx.amount,
-                    description=f"Paystack webhook purchase {reference}",
-                    payment_reference=reference,
-                )
-                tx.status = "completed"
-                tx.save(update_fields=["status"])
+                from payments.points_service import complete_pending_transaction
+                complete_pending_transaction(tx)
                 return JsonResponse({"status": "ok"})
             except PointTransaction.DoesNotExist:
                 pass

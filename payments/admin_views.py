@@ -92,6 +92,7 @@ def points_admin_view(request):
                 amount,
                 description=reason or "Manual award",
                 payment_reference=reference,
+                transaction_type="bonus",
             )
             messages.success(
                 request,

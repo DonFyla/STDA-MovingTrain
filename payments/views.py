@@ -92,11 +92,11 @@ def buy_points_view(request):
             )
 
             logger.info(
-                "Initializing Paystack for user %s, ref %s, amount %s kobo, key prefix %s",
+                "Initializing Paystack for user %s, ref %s, amount %s kobo, key configured=%s",
                 request.user.email,
                 payment_reference,
                 selected_package["price"] * 100,
-                settings.PAYSTACK_SECRET_KEY[:8] if settings.PAYSTACK_SECRET_KEY else "NONE",
+                bool(settings.PAYSTACK_SECRET_KEY),
             )
 
             result = initialize_transaction(
@@ -161,15 +161,8 @@ def paystack_callback_view(request):
 
     if status == "success":
         if tx.status == "pending":
-            from payments.points_service import add_points
-            add_points(
-                request.user,
-                tx.amount,
-                description=f"Paystack purchase {reference}",
-                payment_reference=reference,
-            )
-            tx.status = "completed"
-            tx.save(update_fields=["status"])
+            from payments.points_service import complete_pending_transaction
+            complete_pending_transaction(tx)
             send_points_purchased(request.user, tx)
         messages.success(
             request,
@@ -209,6 +202,15 @@ def booking_callback_view(request):
         return redirect("accounts:dashboard")
 
     if status == "success":
+        expected_kobo = int(booking.monthly_amount * 100)
+        actual_kobo = result.get("amount") or result.get("data", {}).get("amount") or 0
+        if actual_kobo != expected_kobo:
+            messages.error(
+                request,
+                "Payment amount mismatch. Please contact support."
+            )
+            return redirect("accounts:dashboard")
+
         if booking.payment_status != "paid":
             booking.payment_status = "paid"
             booking.payment_date = timezone.now()
@@ -253,6 +255,15 @@ def special_booking_callback_view(request):
         return redirect("accounts:dashboard")
 
     if status == "success":
+        expected_kobo = int(booking.total_amount * 100)
+        actual_kobo = result.get("amount") or result.get("data", {}).get("amount") or 0
+        if actual_kobo != expected_kobo:
+            messages.error(
+                request,
+                "Payment amount mismatch. Please contact support."
+            )
+            return redirect("accounts:dashboard")
+
         if booking.payment_status != "paid":
             booking.payment_status = "paid"
             booking.payment_date = timezone.now()

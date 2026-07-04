@@ -613,6 +613,7 @@ class BookingPaymentTests(TestCase):
             "success": True,
             "status": "success",
             "reference": "BK-CALLBACK-123",
+            "amount": 4000000,
         }
         self.client.force_login(self.student_user)
         response = self.client.get(
@@ -909,6 +910,18 @@ class SpecialBookingFlowTests(TestCase):
         AvailabilitySlot.objects.create(
             coach=self.special_coach,
             day_of_week=2,  # Tuesday
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+        )
+        AvailabilitySlot.objects.create(
+            coach=self.special_coach,
+            day_of_week=3,  # Wednesday
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+        )
+        AvailabilitySlot.objects.create(
+            coach=self.special_coach,
+            day_of_week=4,  # Thursday
             start_time=time(14, 0),
             end_time=time(15, 0),
         )

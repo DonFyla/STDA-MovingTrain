@@ -1,12 +1,30 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.urls import reverse
+from django.core.exceptions import PermissionDenied
 from .models import Questionnaire, Question, Qtaker, Options
 from .forms import QtakerForm, AnswerForm
 
 
 QUESTIONS_PER_SESSION = 5
 PASS_PERCENTAGE = 60
+
+
+def _owns_quiz_attempt(request, qtaker):
+    """Return True if the request is allowed to access this quiz attempt."""
+    if qtaker.user_id and request.user.is_authenticated:
+        return qtaker.user_id == request.user.id
+    # Anonymous attempts are tied to the session that created them.
+    session_ids = request.session.get("quiz_qtaker_ids", [])
+    return str(qtaker.id) in session_ids or qtaker.id in session_ids
+
+
+def _register_quiz_attempt(request, qtaker):
+    """Store the qtaker id in session so anonymous users can continue their attempt."""
+    session_ids = request.session.get("quiz_qtaker_ids", [])
+    if qtaker.id not in session_ids:
+        session_ids.append(qtaker.id)
+        request.session["quiz_qtaker_ids"] = session_ids
 
 
 def _build_session(qtaker, questionnaire):
@@ -42,7 +60,11 @@ def qtaker_view(request):
     if request.method == "POST":
         form = QtakerForm(request.POST)
         if form.is_valid():
-            qtaker = form.save()
+            qtaker = form.save(commit=False)
+            if request.user.is_authenticated:
+                qtaker.user = request.user
+            qtaker.save()
+            _register_quiz_attempt(request, qtaker)
             skill = qtaker.skill
             try:
                 questionnaire = Questionnaire.objects.get(title=skill)
@@ -69,6 +91,8 @@ def qtaker_view(request):
 
 def quiz_question_view(request, qtaker_id, question_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
+    if not _owns_quiz_attempt(request, qtaker):
+        raise PermissionDenied
     skill = qtaker.skill
     questionnaire = get_object_or_404(Questionnaire, title=skill)
     question = get_object_or_404(Question, id=question_id, questionnaire=questionnaire)
@@ -152,6 +176,8 @@ def quiz_question_view(request, qtaker_id, question_id):
 
 def quiz_answer_view(request, qtaker_id, answer_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
+    if not _owns_quiz_attempt(request, qtaker):
+        raise PermissionDenied
     answer_id_int = int(answer_id)
 
     if answer_id_int == 0:
@@ -173,10 +199,14 @@ def quiz_answer_view(request, qtaker_id, answer_id):
             "correct": chosen_answer_obj.correct,
         }
 
-    # Award score once per answer view
-    if is_correct:
+    scored_ids = qtaker.scored_question_ids or []
+    already_scored = question.id in scored_ids
+
+    if is_correct and not already_scored:
         qtaker.current_score += 1
-        qtaker.save(update_fields=["current_score"])
+        scored_ids.append(question.id)
+        qtaker.scored_question_ids = scored_ids
+        qtaker.save(update_fields=["current_score", "scored_question_ids"])
 
     correct_answer = Options.objects.filter(question=question, correct=True).first()
 
@@ -206,6 +236,8 @@ def quiz_answer_view(request, qtaker_id, answer_id):
 
 def quiz_result_view(request, qtaker_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
+    if not _owns_quiz_attempt(request, qtaker):
+        raise PermissionDenied
     original_skill = qtaker.skill
     questionnaire = get_object_or_404(Questionnaire, title=original_skill)
 
