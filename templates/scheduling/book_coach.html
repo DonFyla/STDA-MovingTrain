@@ -1,0 +1,955 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block title %}Book {{ coach.name }} - Moving Train Chess Academy{% endblock %}
+
+{% block content %}
+<section class="min-h-screen bg-brand-50 py-16 lg:py-24">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <a href="{% url 'tutors' %}" class="inline-flex items-center text-brand-700 hover:text-brand-900 font-medium mb-8">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Back to Coaches
+        </a>
+
+        <div class="max-w-5xl mx-auto">
+            <!-- Coach Header -->
+            <div class="text-center mb-10">
+                <h1 class="text-3xl lg:text-4xl font-bold text-brand-900 mb-3">Book {{ coach.name }}</h1>
+                {% if coach.specialization %}
+                    <p class="text-brand-600 text-lg">{{ coach.specialization }}</p>
+                {% endif %}
+                <div class="flex items-center justify-center gap-6 mt-4 text-sm text-brand-700">
+                    <span class="flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        {{ points_cost }} point{{ points_cost|pluralize }} / class
+                    </span>
+                    <span class="flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a1 1 0 11-2 0 1 1 0 012 0z"></path></svg>
+                        Your balance: <strong id="user-balance-display">{{ user_balance }}</strong> points
+                    </span>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="mb-8">
+                <div class="inline-flex p-1 bg-white rounded-xl border border-brand-200 shadow-sm">
+                    <button type="button" onclick="switchTab('points')" id="tab-points" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white">
+                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Book with Points
+                    </button>
+                    <button type="button" onclick="switchTab('recurring')" id="tab-recurring" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all text-brand-700 hover:bg-brand-100">
+                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        Book Recurring Classes
+                    </button>
+                    {% if coach.is_special %}
+                        <button type="button" onclick="switchTab('special')" id="tab-special" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all text-brand-700 hover:bg-brand-100">
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a1 1 0 11-2 0 1 1 0 012 0z"></path></svg>
+                            Pay to Book
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Points Tab -->
+            <div id="panel-points" class="tab-panel">
+                <form method="post" class="space-y-8" id="points-form" onsubmit="return validatePointsForm()">
+                    {% csrf_token %}
+                    <input type="hidden" name="booking_type" value="points">
+                    <input type="hidden" name="selected_slots" id="selected-slots-input" value="">
+
+                    {% if points_form.non_field_errors %}
+                        <div class="p-4 bg-red-50 text-red-700 rounded-xl">{{ points_form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <!-- Calendar -->
+                    <div class="card p-6 md:p-8">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <h2 class="text-xl font-bold text-brand-900">Select Time Slots</h2>
+                            <div class="text-sm text-brand-600">
+                                Selected: <span id="selected-count" class="font-bold text-brand-900">0</span>
+                                <span class="mx-2">|</span>
+                                Cost: <span id="selected-cost" class="font-bold text-brand-900">0</span> points
+                            </div>
+                        </div>
+                        <div id="calendar-container" class="space-y-6"></div>
+                    </div>
+
+                    <!-- Selected Slots Summary -->
+                    <div id="selected-slots-summary" class="card p-6 md:p-8 hidden">
+                        <h2 class="text-xl font-bold text-brand-900 mb-4">Selected Slots</h2>
+                        <div id="selected-slots-list" class="flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <!-- Student Info -->
+                    <div class="card p-6 md:p-8">
+                        <h2 class="text-xl font-bold text-brand-900 mb-5">Your Information</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label for="{{ points_form.student_name.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Full Name *</label>
+                                {{ points_form.student_name|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div>
+                                <label for="{{ points_form.student_email.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Email *</label>
+                                {{ points_form.student_email|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div>
+                                <label for="{{ points_form.student_phone.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Phone</label>
+                                {{ points_form.student_phone|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="{{ points_form.student_notes.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Notes</label>
+                                {{ points_form.student_notes|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-brand-50 rounded-xl">
+                            <p class="text-brand-700">
+                                Total Cost: <span id="total-cost-display" class="text-2xl font-bold text-brand-900">0</span> points
+                                <span class="mx-2">|</span>
+                                Balance after booking: <span id="balance-after-display" class="font-bold text-brand-900">{{ user_balance }}</span> points
+                            </p>
+                        </div>
+
+                        <div class="mt-6">
+                            <button type="submit" id="points-submit-btn" class="w-full sm:w-auto px-8 py-4 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                Complete Points Booking
+                            </button>
+                            <a href="{% url 'payments:buy_points' %}" id="buy-points-link" class="hidden ml-4 px-8 py-4 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors inline-flex items-center">
+                                Buy More Points
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Recurring Tab -->
+            <div id="panel-recurring" class="tab-panel hidden">
+                <form method="post" class="space-y-8" id="recurring-form" onsubmit="return validateRecurringForm()">
+                    {% csrf_token %}
+                    <input type="hidden" name="booking_type" value="recurring">
+
+                    {% if recurring_form.non_field_errors %}
+                        <div class="p-4 bg-red-50 text-red-700 rounded-xl">{{ recurring_form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <!-- Booking Mode -->
+                    <div class="card p-6 md:p-8">
+                        <h2 class="text-xl font-bold text-brand-900 mb-5">How Many Sessions Per Week?</h2>
+                        <div class="grid sm:grid-cols-2 gap-4">
+                            {% for value, label in recurring_form.fields.booking_mode.choices %}
+                                <label class="relative cursor-pointer">
+                                    <input type="radio" name="booking_mode" value="{{ value }}" class="peer sr-only" {% if recurring_form.booking_mode.value == value or value == 'single' %}checked{% endif %} onchange="updateRecurringMode()">
+                                    <div class="p-5 rounded-xl border-2 border-brand-200 hover:border-brand-400 peer-checked:border-brand-600 peer-checked:bg-brand-600 peer-checked:text-white transition-all">
+                                        <p class="font-semibold text-lg">{{ label }}</p>
+                                        <p class="text-sm mt-1 opacity-90">
+                                            {% if value == 'single' %}
+                                                ₦{{ price_per_session|floatformat:0 }} × 4 sessions
+                                            {% else %}
+                                                ₦{{ price_per_session|floatformat:0 }} × 8 sessions with 5% discount
+                                            {% endif %}
+                                        </p>
+                                    </div>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-4 p-4 bg-brand-50 rounded-xl">
+                            <p class="text-brand-700">
+                                Total sessions: <span id="recurring-total-sessions" class="font-bold">4</span>
+                                <span class="mx-2">|</span>
+                                Amount due: <span id="recurring-total-amount" class="font-bold text-brand-900">₦<span id="recurring-total-amount-value">{{ price_per_session|floatformat:0 }}</span></span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Session 1 -->
+                    <div class="card p-6 md:p-8">
+                        <h2 class="text-xl font-bold text-brand-900 mb-5">1. Select First Weekly Day</h2>
+                        <div class="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-6">
+                            {% for day_name in day_order %}
+                                {% with day_index=forloop.counter0 %}
+                                    <button type="button"
+                                        data-day="{{ day_index }}"
+                                        data-session="1"
+                                        onclick="selectRecurringDay({{ day_index }}, 1)"
+                                        {% if day_index not in available_days %}disabled{% endif %}
+                                        class="r-day-btn-1 p-3 rounded-xl text-sm font-medium border-2 transition-all
+                                            {% if day_index in available_days %}
+                                                border-brand-200 text-brand-700 hover:border-brand-400 bg-white
+                                            {% else %}
+                                                border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed
+                                            {% endif %}">
+                                        <span class="block sm:hidden">{{ day_name.0 }}</span>
+                                        <span class="hidden sm:block">{{ day_name|slice:':3' }}</span>
+                                    </button>
+                                {% endwith %}
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" name="day_of_week_1" id="r-day-of-week-1" value="{{ recurring_form.day_of_week_1.value|default:'' }}">
+                        {{ recurring_form.time_slot_1 }}
+                        <div id="r-slots-container-1" class="hidden">
+                            <p class="text-sm font-medium text-brand-700 mb-3">Select Time</p>
+                            <div class="flex flex-wrap gap-3" id="r-slots-list-1"></div>
+                        </div>
+                    </div>
+
+                    <!-- Session 2 -->
+                    <div id="r-session-2" class="card p-6 md:p-8 hidden border-dashed border-2 border-brand-300">
+                        <h2 class="text-xl font-bold text-brand-900 mb-5">2. Select Second Weekly Day</h2>
+                        <div class="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-6">
+                            {% for day_name in day_order %}
+                                {% with day_index=forloop.counter0 %}
+                                    <button type="button"
+                                        data-day="{{ day_index }}"
+                                        data-session="2"
+                                        onclick="selectRecurringDay({{ day_index }}, 2)"
+                                        {% if day_index not in available_days %}disabled{% endif %}
+                                        class="r-day-btn-2 p-3 rounded-xl text-sm font-medium border-2 transition-all
+                                            {% if day_index in available_days %}
+                                                border-brand-200 text-brand-700 hover:border-brand-400 bg-white
+                                            {% else %}
+                                                border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed
+                                            {% endif %}">
+                                        <span class="block sm:hidden">{{ day_name.0 }}</span>
+                                        <span class="hidden sm:block">{{ day_name|slice:':3' }}</span>
+                                    </button>
+                                {% endwith %}
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" name="day_of_week_2" id="r-day-of-week-2" value="{{ recurring_form.day_of_week_2.value|default:'' }}">
+                        {{ recurring_form.time_slot_2 }}
+                        <div id="r-slots-container-2" class="hidden">
+                            <p class="text-sm font-medium text-brand-700 mb-3">Select Time</p>
+                            <div class="flex flex-wrap gap-3" id="r-slots-list-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Student Info -->
+                    <div id="r-student-form" class="card p-6 md:p-8 hidden">
+                        <h2 class="text-xl font-bold text-brand-900 mb-5">Your Information</h2>
+                        <div class="bg-brand-50 p-5 rounded-xl mb-6">
+                            <h3 class="font-semibold text-brand-900 mb-2">Booking Summary</h3>
+                            <p class="text-sm text-brand-700"><strong>Coach:</strong> {{ coach.name }}</p>
+                            <p class="text-sm text-brand-700"><strong>Schedule:</strong></p>
+                            <ul class="list-disc list-inside ml-2 text-sm text-brand-700 mb-2" id="r-summary-schedule"></ul>
+                            <p class="text-sm text-brand-700"><strong>Total Sessions:</strong> <span id="r-summary-sessions">4</span></p>
+                            <p class="text-xl font-bold text-brand-900 mt-2">Amount Due: <span id="r-summary-amount">₦<span id="r-summary-amount-value">{{ price_per_session|floatformat:0 }}</span></span></p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label for="{{ recurring_form.student_name.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Full Name *</label>
+                                {{ recurring_form.student_name|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div>
+                                <label for="{{ recurring_form.student_email.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Email *</label>
+                                {{ recurring_form.student_email|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div>
+                                <label for="{{ recurring_form.student_phone.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Phone</label>
+                                {{ recurring_form.student_phone|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div>
+                                <label for="{{ recurring_form.course_type.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Course Type</label>
+                                {{ recurring_form.course_type|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="{{ recurring_form.notes.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Notes</label>
+                                {{ recurring_form.notes|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                            </div>
+                        </div>
+
+                        <div class="pt-6">
+                            <button type="submit" class="w-full sm:w-auto px-8 py-4 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors">
+                                Complete Booking
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            {% if coach.is_special %}
+            <div id="panel-special" class="tab-panel hidden">
+                <form method="post" class="space-y-8 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-8 items-start" id="special-form" onsubmit="return validateSpecialForm()">
+                    {% csrf_token %}
+                    <input type="hidden" name="booking_type" value="special">
+                    <input type="hidden" name="selected_slots" id="special-selected-slots" value="">
+
+                    <div class="lg:col-span-2 space-y-8">
+                        {% if special_form.non_field_errors %}
+                            <div class="p-4 bg-red-50 text-red-700 rounded-xl">{{ special_form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <!-- Discount Tiers -->
+                        <div class="p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+                            <h3 class="font-semibold text-brand-900 mb-2 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21L16.54 13.97L22 9.24L14.81 8.62L12 2L9.19 8.62L2 9.24L7.45 13.97L5.82 21L12 17.27Z"/></svg>
+                                Session Discounts
+                            </h3>
+                            <ul class="text-sm text-brand-700 space-y-1">
+                                <li id="tier-8" class="opacity-60">8+ sessions: 10% off</li>
+                                <li id="tier-12" class="opacity-60">12+ sessions: 15% off</li>
+                            </ul>
+                        </div>
+
+                        <!-- Session Selection -->
+                        <div id="special-individual-panel" class="card p-6 md:p-8">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                                <h2 class="text-xl font-bold text-brand-900">Select Sessions</h2>
+                                <div class="text-sm text-brand-600">
+                                    Selected: <span id="special-selected-count" class="font-bold text-brand-900">0</span>
+                                    <span class="mx-2">|</span>
+                                    Rate: ₦{{ price_per_session|floatformat:0 }} / session
+                                </div>
+                            </div>
+                            <div id="special-calendar-container" class="space-y-6"></div>
+                        </div>
+
+                        <!-- Selected Sessions Summary (inline) -->
+                        <div id="special-selected-summary" class="card p-6 md:p-8 hidden">
+                            <h2 class="text-xl font-bold text-brand-900 mb-4">Selected Sessions</h2>
+                            <div id="special-selected-list" class="flex flex-wrap gap-2"></div>
+                        </div>
+
+                        <!-- Student Info -->
+                        <div class="card p-6 md:p-8">
+                            <h2 class="text-xl font-bold text-brand-900 mb-5">Your Information</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label for="{{ special_form.student_name.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Full Name *</label>
+                                    {{ special_form.student_name|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                                </div>
+                                <div>
+                                    <label for="{{ special_form.student_email.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Email *</label>
+                                    {{ special_form.student_email|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                                </div>
+                                <div>
+                                    <label for="{{ special_form.student_phone.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Phone</label>
+                                    {{ special_form.student_phone|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label for="{{ special_form.admin_notes.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Notes</label>
+                                    {{ special_form.admin_notes|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all" }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sticky Summary Sidebar -->
+                    <div class="lg:col-span-1">
+                        <div class="sticky top-24 card p-6 md:p-8 border-2 border-amber-200 bg-gradient-to-b from-amber-50/50 to-white">
+                            <h2 class="text-xl font-bold text-brand-900 mb-5">Booking Summary</h2>
+                            <div class="space-y-3 text-sm text-brand-700">
+                                <div class="flex justify-between">
+                                    <span>Coach</span>
+                                    <span class="font-semibold text-brand-900">{{ coach.name }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Sessions</span>
+                                    <span class="font-semibold text-brand-900" id="summary-session-count">0</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Rate</span>
+                                    <span class="font-semibold text-brand-900">₦{{ price_per_session|floatformat:0 }} / session</span>
+                                </div>
+                                <div class="flex justify-between" id="summary-discount-row">
+                                    <span>Discount</span>
+                                    <span class="font-semibold text-green-700" id="summary-discount">0%</span>
+                                </div>
+                                <div class="border-t border-brand-200 pt-3 mt-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-brand-700">Total</span>
+                                        <span class="text-2xl font-bold text-brand-900">₦<span id="summary-total">0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="summary-dates" class="mt-5 hidden">
+                                <h3 class="font-semibold text-brand-900 mb-2 text-sm">Selected Dates</h3>
+                                <div id="summary-dates-list" class="max-h-64 overflow-y-auto space-y-1.5 text-sm text-brand-700"></div>
+                            </div>
+                            <div class="mt-6">
+                                <button type="submit" id="special-submit-btn" class="w-full px-6 py-4 bg-gradient-to-r from-amber-600 to-orange-700 text-white font-semibold rounded-full hover:from-amber-700 hover:to-orange-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    Proceed to Payment
+                                </button>
+                            </div>
+                            <p class="text-xs text-brand-500 mt-3 text-center">Secure payment via Paystack</p>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<script>
+    const slotsByDay = JSON.parse('{{ slots_by_day_json|escapejs }}');
+    const bookedSlotsRecurring = JSON.parse('{{ booked_slots_recurring_json|escapejs }}');
+    const bookedSlotsFlexible = JSON.parse('{{ booked_slots_flexible_json|escapejs }}');
+    const bookedSlotsSpecial = JSON.parse('{{ booked_slots_special_json|escapejs }}');
+    const blockedDates = JSON.parse('{{ blocked_dates_json|escapejs }}');
+    const dayNames = JSON.parse('{{ day_order_json|escapejs }}');
+    const pricePerSession = {{ price_per_session }};
+    const pointsCost = {{ points_cost }};
+    const userBalance = {{ user_balance }};
+
+    // Tab switching
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+        document.getElementById('panel-' + tab).classList.remove('hidden');
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('bg-brand-600', 'text-white');
+            btn.classList.add('text-brand-700', 'hover:bg-brand-100');
+        });
+        const activeBtn = document.getElementById('tab-' + tab);
+        activeBtn.classList.remove('text-brand-700', 'hover:bg-brand-100');
+        activeBtn.classList.add('bg-brand-600', 'text-white');
+    }
+
+    // ================= POINTS BOOKING =================
+    let selectedPointsSlots = [];
+
+    function formatTime(timeStr) {
+        const [h, m] = timeStr.split(':');
+        const hour = parseInt(h, 10);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour % 12 || 12;
+        return `${displayHour}:${m} ${ampm}`;
+    }
+
+    function isSlotBookedFlexible(dateStr, startTime, endTime) {
+        const booked = bookedSlotsFlexible[dateStr] || [];
+        return booked.some(b => b.start < endTime && b.end > startTime);
+    }
+
+    function isSlotBookedSpecial(dateStr, startTime, endTime) {
+        const booked = bookedSlotsSpecial[dateStr] || [];
+        return booked.some(b => b.start < endTime && b.end > startTime);
+    }
+
+    function isSlotBlocked(dateStr, startTime, endTime) {
+        const block = blockedDates[dateStr];
+        if (!block) return false;
+        if (block.full_day) return true;
+        return startTime < block.end && endTime > block.start;
+    }
+
+    function formatDateLagos(d) {
+        return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    }
+
+    function getLagosToday() {
+        const now = new Date();
+        const lagosStr = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+        return new Date(lagosStr + 'T00:00:00');
+    }
+
+    function generateCalendar() {
+        const container = document.getElementById('calendar-container');
+        container.innerHTML = '';
+        const today = getLagosToday();
+
+        for (let week = 0; week < 4; week++) {
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() + 1 + week * 7); // Start from tomorrow
+            // Adjust to Monday of the week containing tomorrow
+            const dayOfWeek = weekStart.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const monday = new Date(weekStart);
+            monday.setDate(weekStart.getDate() + mondayOffset);
+
+            const weekDiv = document.createElement('div');
+            weekDiv.className = 'border border-brand-200 rounded-xl p-4';
+            weekDiv.innerHTML = `<h4 class="font-semibold text-brand-900 mb-3">Week of ${monday.toLocaleDateString('en-US', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric', year: 'numeric' })}</h4>`;
+
+            const daysDiv = document.createElement('div');
+            daysDiv.className = 'grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2';
+
+            for (let d = 0; d < 7; d++) {
+                const date = new Date(monday);
+                date.setDate(monday.getDate() + d);
+                const dateStr = formatDateLagos(date);
+                const dayIndex = date.getDay();
+                const slots = slotsByDay[dayIndex] || [];
+                const isPast = date < today;
+
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'min-h-[120px] p-2 bg-brand-50 rounded-lg';
+
+                let content = '';
+                const availableSlots = slots.filter(slot => {
+                    const start = slot.start_time;
+                    const end = slot.end_time;
+                    return !isSlotBookedFlexible(dateStr, start, end) && !isSlotBookedSpecial(dateStr, start, end) && !isSlotBlocked(dateStr, start, end) && !isSlotBookedRecurring(dayIndex, slot);
+                });
+
+                if (isPast) {
+                    content = '<span class="text-xs text-gray-400">—</span>';
+                } else if (slots.length === 0) {
+                    content = '<span class="text-xs text-gray-400">—</span>';
+                } else if (availableSlots.length === 0) {
+                    content = '<div class="text-xs text-orange-500 font-medium">Fully Booked</div>';
+                } else {
+                    content = '<div class="space-y-1">' + availableSlots.map(slot => {
+                        const isSelected = selectedPointsSlots.some(s => s.date === dateStr && s.start_time === slot.start_time);
+                        return `<button type="button" onclick="togglePointsSlot('${dateStr}', ${dayIndex}, '${slot.start_time}', '${slot.end_time}')" class="w-full text-xs py-1.5 px-1 rounded transition-colors ${isSelected ? 'bg-brand-600 text-white' : 'bg-white hover:bg-brand-100 border border-brand-200 text-brand-700'}">${formatTime(slot.start_time)}</button>`;
+                    }).join('') + '</div>';
+                }
+
+                const displayDay = parseInt(date.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric' }), 10);
+                dayDiv.innerHTML = `
+                    <div class="text-xs text-brand-500 mb-1">${dayNames[dayIndex].slice(0, 3)}</div>
+                    <div class="text-sm font-semibold text-brand-900 mb-2">${displayDay}</div>
+                    ${content}
+                `;
+                daysDiv.appendChild(dayDiv);
+            }
+
+            weekDiv.appendChild(daysDiv);
+            container.appendChild(weekDiv);
+        }
+    }
+
+    function togglePointsSlot(dateStr, dayOfWeek, startTime, endTime) {
+        const existingIndex = selectedPointsSlots.findIndex(s => s.date === dateStr && s.start_time === startTime);
+        if (existingIndex >= 0) {
+            selectedPointsSlots.splice(existingIndex, 1);
+        } else {
+            if (selectedPointsSlots.length >= 10) {
+                alert('You can book up to 10 sessions at a time');
+                return;
+            }
+            selectedPointsSlots.push({ date: dateStr, day_of_week: dayOfWeek, start_time: startTime, end_time: endTime });
+        }
+        selectedPointsSlots.sort((a, b) => a.date.localeCompare(b.date) || a.start_time.localeCompare(b.start_time));
+        updatePointsSummary();
+        generateCalendar();
+    }
+
+    function updatePointsSummary() {
+        const count = selectedPointsSlots.length;
+        const totalCost = count * pointsCost;
+        const balanceAfter = userBalance - totalCost;
+
+        document.getElementById('selected-count').textContent = count;
+        document.getElementById('selected-cost').textContent = totalCost;
+        document.getElementById('total-cost-display').textContent = totalCost;
+        document.getElementById('balance-after-display').textContent = balanceAfter;
+        document.getElementById('selected-slots-input').value = JSON.stringify(selectedPointsSlots);
+
+        const summary = document.getElementById('selected-slots-summary');
+        const list = document.getElementById('selected-slots-list');
+        if (count > 0) {
+            summary.classList.remove('hidden');
+            list.innerHTML = selectedPointsSlots.map(slot => `
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-100 text-brand-700 text-sm">
+                    ${dayNames[slot.day_of_week].slice(0, 3)} ${slot.date} · ${formatTime(slot.start_time)}
+                    <button type="button" onclick="togglePointsSlot('${slot.date}', ${slot.day_of_week}, '${slot.start_time}', '${slot.end_time}')" class="text-brand-500 hover:text-red-600">×</button>
+                </span>
+            `).join('');
+        } else {
+            summary.classList.add('hidden');
+        }
+
+        const submitBtn = document.getElementById('points-submit-btn');
+        const buyLink = document.getElementById('buy-points-link');
+        if (count === 0) {
+            submitBtn.disabled = true;
+            buyLink.classList.add('hidden');
+        } else if (userBalance < totalCost) {
+            submitBtn.disabled = true;
+            buyLink.classList.remove('hidden');
+        } else {
+            submitBtn.disabled = false;
+            buyLink.classList.add('hidden');
+        }
+    }
+
+    function validatePointsForm() {
+        if (selectedPointsSlots.length === 0) {
+            alert('Please select at least one time slot.');
+            return false;
+        }
+        const totalCost = selectedPointsSlots.length * pointsCost;
+        if (userBalance < totalCost) {
+            alert('Insufficient points. Please buy more points.');
+            return false;
+        }
+        return true;
+    }
+
+    // ================= RECURRING BOOKING =================
+    let rSelectedDay1 = null;
+    let rSelectedSlot1 = null;
+    let rSelectedDay2 = null;
+    let rSelectedSlot2 = null;
+
+    function isSlotBookedRecurring(dayIndex, slot) {
+        const booked = bookedSlotsRecurring[dayIndex] || [];
+        return booked.some(b => b.start < slot.end_time && b.end > slot.start_time);
+    }
+
+    function updateRecurringMode() {
+        const mode = document.querySelector('input[name="booking_mode"]:checked').value;
+        const session2 = document.getElementById('r-session-2');
+        const totalSessions = document.getElementById('recurring-total-sessions');
+        const totalAmountValue = document.getElementById('recurring-total-amount-value');
+        const summarySessions = document.getElementById('r-summary-sessions');
+
+        if (mode === 'double') {
+            session2.classList.remove('hidden');
+            totalSessions.textContent = '8';
+            summarySessions.textContent = '8';
+            totalAmountValue.textContent = Math.round(pricePerSession * 8 * 0.95).toLocaleString();
+        } else {
+            session2.classList.add('hidden');
+            rSelectedDay2 = null;
+            rSelectedSlot2 = null;
+            document.getElementById('r-day-of-week-2').value = '';
+            document.querySelector('[name="time_slot_2"]').value = '';
+            totalSessions.textContent = '4';
+            summarySessions.textContent = '4';
+            totalAmountValue.textContent = (pricePerSession * 4).toLocaleString();
+        }
+        updateRecurringSummary();
+        updateRecurringStudentFormVisibility();
+    }
+
+    function selectRecurringDay(dayIndex, session) {
+        if (!slotsByDay[dayIndex]) return;
+
+        if (session === 1) {
+            rSelectedDay1 = dayIndex;
+            rSelectedSlot1 = null;
+            document.getElementById('r-day-of-week-1').value = dayIndex;
+            document.querySelector('[name="time_slot_1"]').value = '';
+            renderRecurringDayButtons(2);
+            renderRecurringSlots(2);
+        } else {
+            if (dayIndex === rSelectedDay1) return;
+            rSelectedDay2 = dayIndex;
+            rSelectedSlot2 = null;
+            document.getElementById('r-day-of-week-2').value = dayIndex;
+            document.querySelector('[name="time_slot_2"]').value = '';
+        }
+
+        renderRecurringDayButtons(session);
+        renderRecurringSlots(session);
+        updateRecurringStudentFormVisibility();
+    }
+
+    function renderRecurringDayButtons(session) {
+        document.querySelectorAll(`.r-day-btn-${session}`).forEach(btn => {
+            const day = parseInt(btn.dataset.day);
+            const isSelected = session === 1 ? day === rSelectedDay1 : day === rSelectedDay2;
+            const isAvailable = slotsByDay[day] !== undefined;
+            const isSameAsDay1 = session === 2 && day === rSelectedDay1;
+
+            btn.classList.remove('bg-brand-600', 'text-white', 'border-brand-600', 'bg-white', 'text-brand-700', 'border-brand-200', 'bg-gray-50', 'text-gray-300', 'border-gray-100', 'cursor-not-allowed');
+            btn.disabled = false;
+
+            if (isSelected) {
+                btn.classList.add('bg-brand-600', 'text-white', 'border-brand-600');
+            } else if (isSameAsDay1) {
+                btn.classList.add('bg-gray-100', 'text-gray-400', 'border-gray-100', 'cursor-not-allowed');
+                btn.disabled = true;
+            } else if (isAvailable) {
+                btn.classList.add('bg-white', 'text-brand-700', 'border-brand-200');
+            } else {
+                btn.classList.add('bg-gray-50', 'text-gray-300', 'border-gray-100', 'cursor-not-allowed');
+                btn.disabled = true;
+            }
+        });
+    }
+
+    function renderRecurringSlots(session) {
+        const dayIndex = session === 1 ? rSelectedDay1 : rSelectedDay2;
+        const container = document.getElementById(`r-slots-container-${session}`);
+        const list = document.getElementById(`r-slots-list-${session}`);
+
+        if (dayIndex === null || !slotsByDay[dayIndex]) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        list.innerHTML = '';
+        const selectedSlot = session === 1 ? rSelectedSlot1 : rSelectedSlot2;
+        slotsByDay[dayIndex].forEach(slot => {
+            const booked = isSlotBookedRecurring(dayIndex, slot);
+            const isSelected = selectedSlot && selectedSlot.start_time === slot.start_time && selectedSlot.end_time === slot.end_time;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `px-4 py-2 rounded-full text-sm font-medium border-2 transition-all ${
+                booked
+                    ? 'bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed'
+                    : isSelected
+                        ? 'bg-brand-600 text-white border-brand-600'
+                        : 'border-brand-200 text-brand-700 hover:border-brand-400 bg-white'
+            }`;
+            btn.textContent = formatTime(slot.start_time) + ' - ' + formatTime(slot.end_time) + (booked ? ' (Booked)' : '');
+
+            if (!booked) {
+                btn.onclick = () => selectRecurringSlot(session, slot);
+            }
+            list.appendChild(btn);
+        });
+
+        container.classList.remove('hidden');
+    }
+
+    function selectRecurringSlot(session, slot) {
+        if (session === 1) {
+            rSelectedSlot1 = slot;
+            document.querySelector('[name="time_slot_1"]').value = slot.start_time + '|' + slot.end_time;
+        } else {
+            rSelectedSlot2 = slot;
+            document.querySelector('[name="time_slot_2"]').value = slot.start_time + '|' + slot.end_time;
+        }
+        renderRecurringSlots(session);
+        updateRecurringSummary();
+        updateRecurringStudentFormVisibility();
+    }
+
+    function updateRecurringSummary() {
+        const schedule = document.getElementById('r-summary-schedule');
+        schedule.innerHTML = '';
+        if (rSelectedDay1 !== null && rSelectedSlot1) {
+            const li = document.createElement('li');
+            li.textContent = dayNames[rSelectedDay1] + 's at ' + formatTime(rSelectedSlot1.start_time);
+            schedule.appendChild(li);
+        }
+        const mode = document.querySelector('input[name="booking_mode"]:checked').value;
+        if (mode === 'double' && rSelectedDay2 !== null && rSelectedSlot2) {
+            const li = document.createElement('li');
+            li.textContent = dayNames[rSelectedDay2] + 's at ' + formatTime(rSelectedSlot2.start_time);
+            schedule.appendChild(li);
+        }
+
+        const sessions = mode === 'double' ? 8 : 4;
+        const total = mode === 'double' ? Math.round(pricePerSession * sessions * 0.95) : pricePerSession * sessions;
+        document.getElementById('r-summary-amount-value').textContent = total.toLocaleString();
+    }
+
+    function updateRecurringStudentFormVisibility() {
+        const mode = document.querySelector('input[name="booking_mode"]:checked').value;
+        const ready = rSelectedDay1 !== null && rSelectedSlot1 &&
+            (mode === 'single' || (rSelectedDay2 !== null && rSelectedSlot2));
+        const studentForm = document.getElementById('r-student-form');
+        if (ready) {
+            studentForm.classList.remove('hidden');
+        } else {
+            studentForm.classList.add('hidden');
+        }
+    }
+
+    function validateRecurringForm() {
+        const mode = document.querySelector('input[name="booking_mode"]:checked').value;
+        if (rSelectedDay1 === null || !rSelectedSlot1) {
+            alert('Please select a day and time for your first weekly session.');
+            return false;
+        }
+        if (mode === 'double' && (rSelectedDay2 === null || !rSelectedSlot2)) {
+            alert('Please select a day and time for your second weekly session.');
+            return false;
+        }
+        return true;
+    }
+
+    // ================= SPECIAL PACKAGE BOOKING =================
+    let selectedSpecialSlots = [];
+
+    function isSlotUnavailable(dateStr, dayIndex, slot) {
+        const start = slot.start_time;
+        const end = slot.end_time;
+        return isSlotBookedFlexible(dateStr, start, end) ||
+               isSlotBookedSpecial(dateStr, start, end) ||
+               isSlotBlocked(dateStr, start, end) ||
+               isSlotBookedRecurring(dayIndex, slot);
+    }
+
+    function generateSpecialCalendar() {
+        const container = document.getElementById('special-calendar-container');
+        if (!container) return;
+        container.innerHTML = '';
+        const today = getLagosToday();
+
+        for (let week = 0; week < 4; week++) {
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() + 1 + week * 7);
+            const dayOfWeek = weekStart.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const monday = new Date(weekStart);
+            monday.setDate(weekStart.getDate() + mondayOffset);
+
+            const weekDiv = document.createElement('div');
+            weekDiv.className = 'border border-brand-200 rounded-xl p-4';
+            weekDiv.innerHTML = `<h4 class="font-semibold text-brand-900 mb-3">Week of ${monday.toLocaleDateString('en-US', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric', year: 'numeric' })}</h4>`;
+
+            const daysDiv = document.createElement('div');
+            daysDiv.className = 'grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2';
+
+            for (let d = 0; d < 7; d++) {
+                const date = new Date(monday);
+                date.setDate(monday.getDate() + d);
+                const dateStr = formatDateLagos(date);
+                const dayIndex = date.getDay();
+                const slots = slotsByDay[dayIndex] || [];
+                const isPast = date < today;
+
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'min-h-[120px] p-2 bg-brand-50 rounded-lg';
+
+                let content = '';
+                const availableSlots = slots.filter(slot => !isSlotUnavailable(dateStr, dayIndex, slot));
+
+                if (isPast) {
+                    content = '<span class="text-xs text-gray-400">—</span>';
+                } else if (slots.length === 0) {
+                    content = '<span class="text-xs text-gray-400">—</span>';
+                } else if (availableSlots.length === 0) {
+                    content = '<div class="text-xs text-orange-500 font-medium">Fully Booked</div>';
+                } else {
+                    content = '<div class="space-y-1">' + availableSlots.map(slot => {
+                        const isSelected = selectedSpecialSlots.some(s => s.date === dateStr && s.start_time === slot.start_time);
+                        return `<button type="button" onclick="toggleSpecialSlot('${dateStr}', ${dayIndex}, '${slot.start_time}', '${slot.end_time}')" class="w-full text-xs py-1.5 px-1 rounded transition-colors ${isSelected ? 'bg-brand-600 text-white' : 'bg-white hover:bg-brand-100 border border-brand-200 text-brand-700'}">${formatTime(slot.start_time)}</button>`;
+                    }).join('') + '</div>';
+                }
+
+                const displayDay = parseInt(date.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric' }), 10);
+                dayDiv.innerHTML = `
+                    <div class="text-xs text-brand-500 mb-1">${dayNames[dayIndex].slice(0, 3)}</div>
+                    <div class="text-sm font-semibold text-brand-900 mb-2">${displayDay}</div>
+                    ${content}
+                `;
+                daysDiv.appendChild(dayDiv);
+            }
+
+            weekDiv.appendChild(daysDiv);
+            container.appendChild(weekDiv);
+        }
+    }
+
+    function toggleSpecialSlot(dateStr, dayOfWeek, startTime, endTime) {
+        const existingIndex = selectedSpecialSlots.findIndex(s => s.date === dateStr && s.start_time === startTime);
+        if (existingIndex >= 0) {
+            selectedSpecialSlots.splice(existingIndex, 1);
+        } else {
+            if (selectedSpecialSlots.length >= 20) {
+                alert('You can book up to 20 special sessions at a time');
+                return;
+            }
+            selectedSpecialSlots.push({ date: dateStr, day_of_week: dayOfWeek, start_time: startTime, end_time: endTime });
+        }
+        selectedSpecialSlots.sort((a, b) => a.date.localeCompare(b.date) || a.start_time.localeCompare(b.start_time));
+        updateSpecialSummary();
+        generateSpecialCalendar();
+    }
+
+    function getSpecialDiscount(count) {
+        if (count >= 12) return 15;
+        if (count >= 8) return 10;
+        return 0;
+    }
+
+    function calculateSpecialTotal(count) {
+        const discount = getSpecialDiscount(count);
+        return Math.round(count * pricePerSession * (1 - discount / 100));
+    }
+
+    function updateSpecialSummary() {
+        const count = selectedSpecialSlots.length;
+        const discount = getSpecialDiscount(count);
+        const total = calculateSpecialTotal(count);
+
+        // Inline display
+        const countEl = document.getElementById('special-selected-count');
+        if (countEl) countEl.textContent = count;
+        const sessionsEl = document.getElementById('special-total-sessions');
+        if (sessionsEl) sessionsEl.textContent = count;
+        const amountEl = document.getElementById('special-total-amount');
+        if (amountEl) amountEl.textContent = total.toLocaleString();
+
+        document.getElementById('special-selected-slots').value = JSON.stringify(selectedSpecialSlots);
+
+        // Inline selected list
+        const summary = document.getElementById('special-selected-summary');
+        const list = document.getElementById('special-selected-list');
+        if (summary && list) {
+            if (count > 0) {
+                summary.classList.remove('hidden');
+                list.innerHTML = selectedSpecialSlots.map(slot => `
+                    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-100 text-brand-700 text-sm">
+                        ${dayNames[slot.day_of_week].slice(0, 3)} ${slot.date} · ${formatTime(slot.start_time)}
+                        <button type="button" onclick="toggleSpecialSlot('${slot.date}', ${slot.day_of_week}, '${slot.start_time}', '${slot.end_time}')" class="text-brand-500 hover:text-red-600">×</button>
+                    </span>
+                `).join('');
+            } else {
+                summary.classList.add('hidden');
+            }
+        }
+
+        // Sticky sidebar summary
+        const summaryCount = document.getElementById('summary-session-count');
+        if (summaryCount) summaryCount.textContent = count;
+        const summaryDiscount = document.getElementById('summary-discount');
+        if (summaryDiscount) {
+            summaryDiscount.textContent = discount + '%';
+            summaryDiscount.parentElement.classList.toggle('hidden', discount === 0);
+        }
+        const summaryTotal = document.getElementById('summary-total');
+        if (summaryTotal) summaryTotal.textContent = total.toLocaleString();
+
+        const summaryDates = document.getElementById('summary-dates');
+        const summaryDatesList = document.getElementById('summary-dates-list');
+        if (summaryDates && summaryDatesList) {
+            if (count > 0) {
+                summaryDates.classList.remove('hidden');
+                summaryDatesList.innerHTML = selectedSpecialSlots.map(slot => `
+                    <div class="flex justify-between">
+                        <span>${dayNames[slot.day_of_week].slice(0, 3)} ${slot.date}</span>
+                        <span class="font-medium">${formatTime(slot.start_time)} - ${formatTime(slot.end_time)}</span>
+                    </div>
+                `).join('');
+            } else {
+                summaryDates.classList.add('hidden');
+            }
+        }
+
+        // Discount tier highlights
+        const tier8 = document.getElementById('tier-8');
+        const tier12 = document.getElementById('tier-12');
+        if (tier8 && tier12) {
+            tier8.classList.toggle('opacity-60', count < 8);
+            tier8.classList.toggle('font-semibold', count >= 8);
+            tier12.classList.toggle('opacity-60', count < 12);
+            tier12.classList.toggle('font-semibold', count >= 12);
+        }
+
+        const submitBtn = document.getElementById('special-submit-btn');
+        if (submitBtn) submitBtn.disabled = count === 0;
+    }
+
+    function validateSpecialForm() {
+        if (selectedSpecialSlots.length === 0) {
+            alert('Please select at least one session.');
+            return false;
+        }
+        return true;
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        generateCalendar();
+        generateSpecialCalendar();
+        updateRecurringMode();
+        renderRecurringDayButtons(1);
+        renderRecurringDayButtons(2);
+
+        // Handle ?tab=special query param
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('tab') === 'special' && document.getElementById('tab-special')) {
+            switchTab('special');
+        }
+    });
+</script>
+{% endblock %}
