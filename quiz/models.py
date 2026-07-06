@@ -21,8 +21,8 @@ class Qtaker(models.Model):
         ("expert", "Expert"),
     )
     name = models.CharField(null=False, max_length=100)
-    age = models.IntegerField(blank=False, null=False)
-    email = models.EmailField(null=True)
+    age = models.IntegerField(blank=True, null=True)
+    email = models.EmailField(null=True, blank=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

@@ -4,7 +4,7 @@
 
 {% block content %}
 <section class="container mx-auto px-6 py-16">
-    <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
+    <div id="result-card" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
         <h1 class="text-3xl font-semibold mb-4">Quiz Results</h1>
 
         {% if passed %}
@@ -22,7 +22,7 @@
         <p class="text-5xl font-bold text-[#5E5044] mb-2">{{ percentage }}%</p>
         <p class="text-gray-600 mb-8">You scored {{ score }} out of {{ total_questions }}</p>
 
-        <div class="flex flex-col sm:flex-row justify-center gap-4">
+        <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
             <a href="{% url 'quiz:register' %}" class="px-6 py-3 border border-[#5E5044] text-[#5E5044] rounded-full hover:bg-[#5E5044] hover:text-white transition-colors font-medium">
                 Retake Quiz
             </a>
@@ -31,7 +31,107 @@
                     Try {{ next_questionnaire.title|title }} Level
                 </a>
             {% endif %}
+            <a href="{% url 'course_detail' course_slug %}" class="px-6 py-3 bg-amber-600 text-white rounded-full hover:bg-amber-700 transition-colors font-medium">
+                View {{ course_slug|title }} Course
+            </a>
+        </div>
+
+        <div class="border-t pt-6">
+            <p class="text-sm text-gray-500 mb-4">Share your result</p>
+            <div class="flex flex-wrap justify-center gap-3">
+                <button id="share-image-btn" class="px-4 py-2 bg-[#5E5044] text-white rounded-full hover:bg-[#4a3f35] transition-colors text-sm font-medium">
+                    Share as Image
+                </button>
+                <button id="share-text-btn" class="px-4 py-2 border border-[#5E5044] text-[#5E5044] rounded-full hover:bg-[#5E5044] hover:text-white transition-colors text-sm font-medium">
+                    Share Text
+                </button>
+                <button id="share-quiz-btn" class="px-4 py-2 border border-amber-600 text-amber-600 rounded-full hover:bg-amber-600 hover:text-white transition-colors text-sm font-medium">
+                    Invite Friends
+                </button>
+            </div>
         </div>
     </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+    const resultCard = document.getElementById('result-card');
+    const shareText = "{{ result_share_text|escapejs }}";
+    const quizUrl = "{{ quiz_url|escapejs }}";
+    const resultUrl = window.location.href;
+
+    async function copyToClipboard(text, successMessage) {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                alert(successMessage);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert(successMessage);
+            }
+        } catch (err) {
+            console.error('Copy failed', err);
+            prompt('Copy this text:', text);
+        }
+    }
+
+    document.getElementById('share-image-btn').addEventListener('click', async function () {
+        try {
+            const canvas = await html2canvas(resultCard, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            const file = new File([blob], 'moving-train-quiz-result.png', { type: 'image/png' });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    title: 'My Chess Quiz Result',
+                    text: shareText,
+                    files: [file],
+                });
+            } else {
+                const link = document.createElement('a');
+                link.download = 'moving-train-quiz-result.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }
+        } catch (err) {
+            console.error('Share image failed', err);
+            alert('Could not share image. It may have been downloaded instead.');
+        }
+    });
+
+    document.getElementById('share-text-btn').addEventListener('click', async function () {
+        const text = shareText + ' ' + resultUrl;
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'My Chess Quiz Result', text: text, url: resultUrl });
+                return;
+            } catch (err) {
+                if (err.name !== 'AbortError') console.error(err);
+            }
+        }
+        await copyToClipboard(text, 'Result copied to clipboard!');
+    });
+
+    document.getElementById('share-quiz-btn').addEventListener('click', async function () {
+        const text = 'Take the Moving Train Chess Quiz: ' + quizUrl;
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'Moving Train Chess Quiz', text: text, url: quizUrl });
+                return;
+            } catch (err) {
+                if (err.name !== 'AbortError') console.error(err);
+            }
+        }
+        await copyToClipboard(text, 'Quiz link copied to clipboard!');
+    });
+</script>
 {% endblock %}
