@@ -4,7 +4,11 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.utils import timezone
+from django_ratelimit.decorators import ratelimit
 from .forms import CustomUserCreationForm
+
+
+RATELIMIT_GROUP = "accounts"
 
 
 def _parse_session_date(value):
@@ -32,6 +36,7 @@ def _get_dashboard_url(user):
     return "accounts:dashboard"
 
 
+@ratelimit(key="ip", rate="5/m", method="POST", block=True)
 def login_view(request):
     if request.method == "POST":
         form = AuthenticationForm(request, data=request.POST)
@@ -49,6 +54,7 @@ def logout_view(request):
     return redirect("home")
 
 
+@ratelimit(key="ip", rate="5/m", method="POST", block=True)
 def signup_view(request):
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)

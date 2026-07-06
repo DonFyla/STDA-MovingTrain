@@ -54,8 +54,19 @@ services:
       - static_volume:/usr/share/nginx/html/static
       - media_volume:/usr/share/nginx/html/media
       - certbot_data:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     depends_on:
       - web
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_data:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h; done'"
+    depends_on:
+      - nginx
     restart: unless-stopped
 
 volumes:
@@ -63,3 +74,4 @@ volumes:
   static_volume:
   media_volume:
   certbot_data:
+  certbot_www:

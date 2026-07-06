@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.conf import settings
 from django.utils import timezone
+from django_ratelimit.decorators import ratelimit
 from .models import PointTransaction
 from .points_service import get_balance
 from .paystack_service import initialize_transaction, verify_transaction, generate_reference
@@ -41,6 +42,7 @@ def payments_index(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="5/m", method="POST", block=True)
 def buy_points_view(request):
     balance = get_balance(request.user)
     selected_package = None
@@ -138,6 +140,7 @@ def buy_points_view(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def paystack_callback_view(request):
     """Handle Paystack redirect after payment."""
     reference = request.GET.get("reference")
@@ -178,6 +181,7 @@ def paystack_callback_view(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def booking_callback_view(request):
     """Handle Paystack redirect after payment for a recurring class booking."""
     from scheduling.models import Booking
@@ -231,6 +235,7 @@ def booking_callback_view(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def special_booking_callback_view(request):
     """Handle Paystack redirect after payment for a special coaching booking."""
     from scheduling.models import SpecialBooking
