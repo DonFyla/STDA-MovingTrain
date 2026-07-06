@@ -8,6 +8,96 @@ from scheduling.models import Coach, Student
 User = get_user_model()
 
 
+class CustomUserChangeFormRoleTests(TestCase):
+    def test_role_switch_to_coach_sets_flags_correctly(self):
+        user = User.objects.create_user(
+            email="student@example.com",
+            username="studentuser",
+            password="testpass123",
+            is_student=True,
+            is_coach=False,
+        )
+        from accounts.forms import CustomUserChangeForm
+
+        form = CustomUserChangeForm(
+            instance=user,
+            data={
+                "email": "student@example.com",
+                "username": "studentuser",
+                "role": "coach",
+            },
+        )
+        self.assertTrue(form.is_valid())
+        saved = form.save()
+        self.assertTrue(saved.is_coach)
+        self.assertFalse(saved.is_student)
+
+    def test_role_switch_to_student_sets_flags_correctly(self):
+        user = User.objects.create_user(
+            email="coach@example.com",
+            username="coachuser",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+        )
+        from accounts.forms import CustomUserChangeForm
+
+        form = CustomUserChangeForm(
+            instance=user,
+            data={
+                "email": "coach@example.com",
+                "username": "coachuser",
+                "role": "student",
+            },
+        )
+        self.assertTrue(form.is_valid())
+        saved = form.save()
+        self.assertTrue(saved.is_student)
+        self.assertFalse(saved.is_coach)
+
+    def test_admin_change_view_can_switch_role(self):
+        admin = User.objects.create_superuser(
+            email="admin@example.com",
+            username="adminuser",
+            password="adminpass123",
+        )
+        user = User.objects.create_user(
+            email="switch@example.com",
+            username="switchuser",
+            password="testpass123",
+            is_student=True,
+            is_coach=False,
+        )
+        self.client.force_login(admin)
+        from django.utils import timezone
+        date_joined = timezone.now()
+        response = self.client.post(
+            reverse("admin:accounts_user_change", args=[user.pk]),
+            {
+                "email": "switch@example.com",
+                "username": "switchuser",
+                "role": "coach",
+                "is_coach": False,
+                "is_student": True,
+                "is_active": True,
+                "is_staff": False,
+                "is_superuser": False,
+                "date_joined_0": date_joined.strftime("%Y-%m-%d"),
+                "date_joined_1": date_joined.strftime("%H:%M:%S"),
+                "initial-date_joined_0": date_joined.strftime("%Y-%m-%d"),
+                "initial-date_joined_1": date_joined.strftime("%H:%M:%S"),
+                "quiz_attempts-TOTAL_FORMS": "0",
+                "quiz_attempts-INITIAL_FORMS": "0",
+                "quiz_attempts-MIN_NUM_FORMS": "0",
+                "quiz_attempts-MAX_NUM_FORMS": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        user.refresh_from_db()
+        self.assertTrue(user.is_coach)
+        self.assertFalse(user.is_student)
+
+
 class AccountsViewsTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
