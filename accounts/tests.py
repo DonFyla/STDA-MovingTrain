@@ -55,6 +55,59 @@ class CustomUserChangeFormRoleTests(TestCase):
         self.assertTrue(saved.is_student)
         self.assertFalse(saved.is_coach)
 
+    def test_role_switch_to_coach_creates_coach_profile(self):
+        user = User.objects.create_user(
+            email="student@example.com",
+            username="studentuser",
+            password="testpass123",
+            is_student=True,
+            is_coach=False,
+            full_name="Student User",
+        )
+        from accounts.forms import CustomUserChangeForm
+        from scheduling.models import Coach
+
+        form = CustomUserChangeForm(
+            instance=user,
+            data={
+                "email": "student@example.com",
+                "username": "studentuser",
+                "role": "coach",
+            },
+        )
+        self.assertTrue(form.is_valid())
+        saved = form.save()
+        self.assertTrue(Coach.objects.filter(user=saved).exists())
+        coach = Coach.objects.get(user=saved)
+        self.assertEqual(coach.name, "Student User")
+        self.assertEqual(coach.email, "student@example.com")
+
+    def test_role_switch_to_student_creates_student_profile(self):
+        user = User.objects.create_user(
+            email="coach@example.com",
+            username="coachuser",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+            phone="08012345678",
+        )
+        from accounts.forms import CustomUserChangeForm
+        from scheduling.models import Student
+
+        form = CustomUserChangeForm(
+            instance=user,
+            data={
+                "email": "coach@example.com",
+                "username": "coachuser",
+                "role": "student",
+            },
+        )
+        self.assertTrue(form.is_valid())
+        saved = form.save()
+        self.assertTrue(Student.objects.filter(user=saved).exists())
+        student = Student.objects.get(user=saved)
+        self.assertEqual(student.parent_phone, "08012345678")
+
     def test_admin_change_view_can_switch_role(self):
         admin = User.objects.create_superuser(
             email="admin@example.com",

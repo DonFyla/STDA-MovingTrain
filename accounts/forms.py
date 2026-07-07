@@ -81,4 +81,22 @@ class CustomUserChangeForm(UserChangeForm):
             user.is_student = True
         if commit:
             user.save()
+            self._create_role_profile(user)
         return user
+
+    def _create_role_profile(self, user):
+        from scheduling.models import Coach, Student
+
+        if user.is_coach:
+            Coach.objects.get_or_create(
+                user=user,
+                defaults={
+                    "name": user.full_name or user.username or user.email,
+                    "email": user.email,
+                },
+            )
+        elif user.is_student:
+            Student.objects.get_or_create(
+                user=user,
+                defaults={"parent_phone": user.phone},
+            )
