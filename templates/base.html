@@ -7,6 +7,81 @@
     <title>{% block title %}Moving Train Chess Academy{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}World-class online chess coaching for beginners to masters. Join Moving Train Chess Academy and make your child fall in love with thinking.{% endblock %}">
     <meta name="theme-color" content="#5E5044">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="{% block canonical_url %}{{ CANONICAL_URL }}{% endblock %}">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="{% block og_title %}Moving Train Chess Academy{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}World-class online chess coaching for beginners to masters. Join Moving Train Chess Academy and make your child fall in love with thinking.{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/others/logo.svg' %}{% endblock %}">
+    <meta property="og:url" content="{% block og_url %}{{ CANONICAL_URL }}{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:site_name" content="{{ SITE_NAME }}">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="{% block twitter_card %}summary_large_image{% endblock %}">
+    <meta name="twitter:title" content="{% block twitter_title %}Moving Train Chess Academy{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}World-class online chess coaching for beginners to masters. Join Moving Train Chess Academy and make your child fall in love with thinking.{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/others/logo.svg' %}{% endblock %}">
+
+    <!-- JSON-LD Organization -->
+    {% block json_ld_organization %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "{{ SITE_NAME }}",
+      "url": "{{ request.scheme }}://{{ request.get_host }}",
+      "logo": "{{ request.scheme }}://{{ request.get_host }}{% static 'images/others/logo.svg' %}",
+      "description": "World-class online chess coaching for beginners to masters.",
+      "sameAs": [
+        "https://www.instagram.com/movingtchess",
+        "https://www.facebook.com"
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "telephone": "+234-808-496-9784",
+        "contactType": "customer service",
+        "availableLanguage": "English"
+      }
+    }
+    </script>
+    {% endblock %}
+
+    {% block extra_json_ld %}{% endblock %}
+
+    <!-- Google Tag Manager -->
+    {% if GOOGLE_TAG_MANAGER_ID %}
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','{{ GOOGLE_TAG_MANAGER_ID }}');</script>
+    {% endif %}
+
+    <!-- Google Analytics 4 (used if GTM is not configured) -->
+    {% if GOOGLE_ANALYTICS_ID and not GOOGLE_TAG_MANAGER_ID %}
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ GOOGLE_ANALYTICS_ID }}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '{{ GOOGLE_ANALYTICS_ID }}');
+    </script>
+    {% endif %}
+
+    <!-- Google Ads conversion loader (conversion events are fired inline on thank-you pages) -->
+    {% if GOOGLE_ADS_CONVERSION_ID %}
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ GOOGLE_ADS_CONVERSION_ID }}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '{{ GOOGLE_ADS_CONVERSION_ID }}');
+    </script>
+    {% endif %}
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,6 +89,11 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body class="bg-brand-50 text-brand-900 antialiased">
+    {% if GOOGLE_TAG_MANAGER_ID %}
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ GOOGLE_TAG_MANAGER_ID }}"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    {% endif %}
     {% block nav %}
     <!-- Navigation -->
     <nav class="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur-md border-b border-brand-100">
