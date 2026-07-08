@@ -1,12 +1,30 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.urls import reverse
+from django.core.exceptions import PermissionDenied
 from .models import Questionnaire, Question, Qtaker, Options
 from .forms import QtakerForm, AnswerForm
 
 
 QUESTIONS_PER_SESSION = 5
 PASS_PERCENTAGE = 60
+
+
+def _owns_quiz_attempt(request, qtaker):
+    """Return True if the request is allowed to access this quiz attempt."""
+    if qtaker.user_id and request.user.is_authenticated:
+        return qtaker.user_id == request.user.id
+    # Anonymous attempts are tied to the session that created them.
+    session_ids = request.session.get("quiz_qtaker_ids", [])
+    return str(qtaker.id) in session_ids or qtaker.id in session_ids
+
+
+def _register_quiz_attempt(request, qtaker):
+    """Store the qtaker id in session so anonymous users can continue their attempt."""
+    session_ids = request.session.get("quiz_qtaker_ids", [])
+    if qtaker.id not in session_ids:
+        session_ids.append(qtaker.id)
+        request.session["quiz_qtaker_ids"] = session_ids
 
 
 def _build_session(qtaker, questionnaire):
@@ -38,11 +56,47 @@ def _text_answer_is_correct(question, answer_text):
     return any(cleaned == text.strip().lower() for text in correct_texts)
 
 
+def _start_quiz_for_user(request, user, skill="beginner"):
+    """Create a Qtaker for an authenticated user and redirect to first question."""
+    qtaker = Qtaker.objects.create(
+        name=user.full_name or user.get_full_name() or user.username or user.email,
+        email=user.email,
+        user=user,
+        skill=skill,
+    )
+    _register_quiz_attempt(request, qtaker)
+
+    try:
+        questionnaire = Questionnaire.objects.get(title=skill)
+    except Questionnaire.DoesNotExist:
+        messages.error(request, f"No questionnaire found for skill level: {skill}")
+        return None
+
+    session = _build_session(qtaker, questionnaire)
+    if not session:
+        messages.error(request, f"No questions found for skill level: {skill}")
+        return None
+
+    return qtaker, session[0]
+
+
 def qtaker_view(request):
+    if request.user.is_authenticated:
+        skill = request.GET.get("skill", "beginner")
+        result = _start_quiz_for_user(request, request.user, skill=skill)
+        if result:
+            qtaker, first_question_id = result
+            return redirect("quiz:question", qtaker_id=qtaker.id, question_id=first_question_id)
+        # Fall through to form if quiz cannot be started
+
     if request.method == "POST":
-        form = QtakerForm(request.POST)
+        form = QtakerForm(request.POST, user=request.user if request.user.is_authenticated else None)
         if form.is_valid():
-            qtaker = form.save()
+            qtaker = form.save(commit=False)
+            if request.user.is_authenticated:
+                qtaker.user = request.user
+            qtaker.save()
+            _register_quiz_attempt(request, qtaker)
             skill = qtaker.skill
             try:
                 questionnaire = Questionnaire.objects.get(title=skill)
@@ -62,13 +116,15 @@ def qtaker_view(request):
             first_question_id = session[0]
             return redirect("quiz:question", qtaker_id=qtaker.id, question_id=first_question_id)
     else:
-        form = QtakerForm()
+        form = QtakerForm(user=request.user if request.user.is_authenticated else None)
 
     return render(request, "quiz/register.html", {"form": form})
 
 
 def quiz_question_view(request, qtaker_id, question_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
+    if not _owns_quiz_attempt(request, qtaker):
+        raise PermissionDenied
     skill = qtaker.skill
     questionnaire = get_object_or_404(Questionnaire, title=skill)
     question = get_object_or_404(Question, id=question_id, questionnaire=questionnaire)
@@ -152,6 +208,8 @@ def quiz_question_view(request, qtaker_id, question_id):
 
 def quiz_answer_view(request, qtaker_id, answer_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
+    if not _owns_quiz_attempt(request, qtaker):
+        raise PermissionDenied
     answer_id_int = int(answer_id)
 
     if answer_id_int == 0:
@@ -173,10 +231,14 @@ def quiz_answer_view(request, qtaker_id, answer_id):
             "correct": chosen_answer_obj.correct,
         }
 
-    # Award score once per answer view
-    if is_correct:
+    scored_ids = qtaker.scored_question_ids or []
+    already_scored = question.id in scored_ids
+
+    if is_correct and not already_scored:
         qtaker.current_score += 1
-        qtaker.save(update_fields=["current_score"])
+        scored_ids.append(question.id)
+        qtaker.scored_question_ids = scored_ids
+        qtaker.save(update_fields=["current_score", "scored_question_ids"])
 
     correct_answer = Options.objects.filter(question=question, correct=True).first()
 
@@ -206,6 +268,8 @@ def quiz_answer_view(request, qtaker_id, answer_id):
 
 def quiz_result_view(request, qtaker_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
+    if not _owns_quiz_attempt(request, qtaker):
+        raise PermissionDenied
     original_skill = qtaker.skill
     questionnaire = get_object_or_404(Questionnaire, title=original_skill)
 
@@ -265,5 +329,8 @@ def quiz_result_view(request, qtaker_id):
         "percentage": percent,
         "passed": passed,
         "next_questionnaire": next_questionnaire_data,
+        "course_slug": qtaker.skill,
+        "quiz_url": request.build_absolute_uri(reverse("quiz:register")),
+        "result_share_text": f"I scored {percent:.0f}% on the Moving Train Chess Quiz! Can you beat me?",
     }
     return render(request, "quiz/result.html", context)

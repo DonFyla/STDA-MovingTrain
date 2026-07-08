@@ -21,14 +21,22 @@ class Qtaker(models.Model):
         ("expert", "Expert"),
     )
     name = models.CharField(null=False, max_length=100)
-    age = models.IntegerField(blank=False, null=False)
-    email = models.EmailField(null=True)
+    age = models.IntegerField(blank=True, null=True)
+    email = models.EmailField(null=True, blank=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="quiz_attempts",
+    )
     current_question_set = models.JSONField(null=True, blank=True, default=None)
     next_question_set = models.JSONField(null=True, blank=True, default=None)
     date_taken = models.DateTimeField(auto_now_add=True, verbose_name="Event Date and Time")
     skill = models.CharField(choices=chess_level, default="beginner", max_length=100)
     test_result = models.FloatField(null=True)
     current_score = models.IntegerField(default=0)
+    scored_question_ids = models.JSONField(default=list, blank=True)
     last_answer_id = models.PositiveIntegerField(null=True, blank=True)
     last_question_id = models.PositiveIntegerField(null=True, blank=True)
     last_text_answer = models.CharField(max_length=2000, blank=True, default="")

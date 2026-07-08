@@ -13,6 +13,13 @@ class QtakerForm(forms.ModelForm):
             "skill": forms.Select(attrs={"class": "form-select"}),
         }
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["age"].required = False
+        if user:
+            self.fields["name"].initial = user.full_name or user.get_full_name() or user.username
+            self.fields["email"].initial = user.email
+
 
 class AnswerForm(forms.Form):
     answer = forms.CharField(

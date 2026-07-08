@@ -231,7 +231,14 @@ class PointsBookingForm(forms.Form):
     student_phone = forms.CharField(max_length=20, required=False)
     student_notes = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
 
+    def __init__(self, *args, coach=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.coach = coach
+
     def clean_selected_slots(self):
+        from datetime import date as dt_date, datetime
+        from .availability import is_slot_available
+
         raw = self.cleaned_data.get("selected_slots", "")
         if not raw:
             raise forms.ValidationError("Please select at least one time slot.")
@@ -241,6 +248,21 @@ class PointsBookingForm(forms.Form):
             raise forms.ValidationError("Invalid slot data.")
         if not isinstance(slots, list) or len(slots) == 0:
             raise forms.ValidationError("Please select at least one time slot.")
+
+        if self.coach:
+            for slot in slots:
+                try:
+                    session_date = dt_date.fromisoformat(slot["date"])
+                    start_time = datetime.strptime(slot["start_time"], "%H:%M").time()
+                    end_time = datetime.strptime(slot["end_time"], "%H:%M").time()
+                except (KeyError, ValueError, TypeError):
+                    raise forms.ValidationError("Invalid slot format.")
+                if not is_slot_available(self.coach, session_date, start_time, end_time):
+                    raise forms.ValidationError(
+                        f"{slot['date']} {slot['start_time']}-{slot['end_time']} is no longer available. "
+                        "Please refresh the page and select another slot."
+                    )
+
         return slots
 
 
@@ -251,7 +273,14 @@ class SpecialBookingForm(forms.Form):
     student_phone = forms.CharField(max_length=20, required=False)
     admin_notes = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
 
+    def __init__(self, *args, coach=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.coach = coach
+
     def clean_selected_slots(self):
+        from datetime import date as dt_date, datetime
+        from .availability import is_slot_available
+
         raw = self.cleaned_data.get("selected_slots", "")
         if not raw:
             raise forms.ValidationError("Please select at least one session.")
@@ -261,4 +290,19 @@ class SpecialBookingForm(forms.Form):
             raise forms.ValidationError("Invalid session data.")
         if not isinstance(slots, list) or len(slots) == 0:
             raise forms.ValidationError("Please select at least one session.")
+
+        if self.coach:
+            for slot in slots:
+                try:
+                    session_date = dt_date.fromisoformat(slot["date"])
+                    start_time = datetime.strptime(slot["start_time"], "%H:%M").time()
+                    end_time = datetime.strptime(slot["end_time"], "%H:%M").time()
+                except (KeyError, ValueError, TypeError):
+                    raise forms.ValidationError("Invalid session format.")
+                if not is_slot_available(self.coach, session_date, start_time, end_time):
+                    raise forms.ValidationError(
+                        f"{slot['date']} {slot['start_time']}-{slot['end_time']} is no longer available. "
+                        "Please refresh the page and select another slot."
+                    )
+
         return slots

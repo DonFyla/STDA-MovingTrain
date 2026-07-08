@@ -17,8 +17,8 @@ class Command(BaseCommand):
         if not public_key:
             self.stdout.write(self.style.WARNING("PAYSTACK_PUBLIC_KEY is not set."))
 
-        self.stdout.write(f"Secret key loaded: {secret_key[:8]}...{secret_key[-4:]}")
-        self.stdout.write(f"Public key loaded: {public_key[:8]}...{public_key[-4:]}")
+        self.stdout.write(f"Secret key configured: {'yes' if secret_key else 'no'}")
+        self.stdout.write(f"Public key configured: {'yes' if public_key else 'no'}")
 
         url = "https://api.paystack.co/bank"
         try:

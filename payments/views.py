@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.conf import settings
 from django.utils import timezone
+from django_ratelimit.decorators import ratelimit
 from .models import PointTransaction
 from .points_service import get_balance
 from .paystack_service import initialize_transaction, verify_transaction, generate_reference
@@ -41,6 +42,7 @@ def payments_index(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="5/m", method="POST", block=True)
 def buy_points_view(request):
     balance = get_balance(request.user)
     selected_package = None
@@ -92,11 +94,11 @@ def buy_points_view(request):
             )
 
             logger.info(
-                "Initializing Paystack for user %s, ref %s, amount %s kobo, key prefix %s",
+                "Initializing Paystack for user %s, ref %s, amount %s kobo, key configured=%s",
                 request.user.email,
                 payment_reference,
                 selected_package["price"] * 100,
-                settings.PAYSTACK_SECRET_KEY[:8] if settings.PAYSTACK_SECRET_KEY else "NONE",
+                bool(settings.PAYSTACK_SECRET_KEY),
             )
 
             result = initialize_transaction(
@@ -138,6 +140,7 @@ def buy_points_view(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def paystack_callback_view(request):
     """Handle Paystack redirect after payment."""
     reference = request.GET.get("reference")
@@ -161,15 +164,8 @@ def paystack_callback_view(request):
 
     if status == "success":
         if tx.status == "pending":
-            from payments.points_service import add_points
-            add_points(
-                request.user,
-                tx.amount,
-                description=f"Paystack purchase {reference}",
-                payment_reference=reference,
-            )
-            tx.status = "completed"
-            tx.save(update_fields=["status"])
+            from payments.points_service import complete_pending_transaction
+            complete_pending_transaction(tx)
             send_points_purchased(request.user, tx)
         messages.success(
             request,
@@ -185,6 +181,7 @@ def paystack_callback_view(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def booking_callback_view(request):
     """Handle Paystack redirect after payment for a recurring class booking."""
     from scheduling.models import Booking
@@ -209,6 +206,15 @@ def booking_callback_view(request):
         return redirect("accounts:dashboard")
 
     if status == "success":
+        expected_kobo = int(booking.monthly_amount * 100)
+        actual_kobo = result.get("amount") or result.get("data", {}).get("amount") or 0
+        if actual_kobo != expected_kobo:
+            messages.error(
+                request,
+                "Payment amount mismatch. Please contact support."
+            )
+            return redirect("accounts:dashboard")
+
         if booking.payment_status != "paid":
             booking.payment_status = "paid"
             booking.payment_date = timezone.now()
@@ -229,6 +235,7 @@ def booking_callback_view(request):
 
 
 @login_required
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def special_booking_callback_view(request):
     """Handle Paystack redirect after payment for a special coaching booking."""
     from scheduling.models import SpecialBooking
@@ -253,6 +260,15 @@ def special_booking_callback_view(request):
         return redirect("accounts:dashboard")
 
     if status == "success":
+        expected_kobo = int(booking.total_amount * 100)
+        actual_kobo = result.get("amount") or result.get("data", {}).get("amount") or 0
+        if actual_kobo != expected_kobo:
+            messages.error(
+                request,
+                "Payment amount mismatch. Please contact support."
+            )
+            return redirect("accounts:dashboard")
+
         if booking.payment_status != "paid":
             booking.payment_status = "paid"
             booking.payment_date = timezone.now()

@@ -5,7 +5,9 @@ from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.urls import reverse
+from django.db import transaction
 from django.utils import timezone
 from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking
 from .forms import BookingForm, CoachProfileForm, AvailabilitySlotForm, CoachBlockedDateForm, PointsBookingForm, SpecialBookingForm
@@ -196,7 +198,7 @@ def coach_dashboard_view(request):
 @login_required
 def book_coach_view(request, coach_id):
     from datetime import date as dt_date
-    from payments.points_service import get_balance, has_sufficient_points, use_points
+    from payments.points_service import get_balance, use_points
     from .models import FlexibleBooking
 
     coach = get_object_or_404(Coach, id=coach_id)
@@ -269,8 +271,8 @@ def book_coach_view(request, coach_id):
         initial["student_phone"] = request.user.phone or ""
 
     recurring_form = BookingForm(initial=initial)
-    points_form = PointsBookingForm(initial=initial)
-    special_form = SpecialBookingForm(initial=initial)
+    points_form = PointsBookingForm(initial=initial, coach=coach)
+    special_form = SpecialBookingForm(initial=initial, coach=coach)
 
     if request.method == "POST":
         booking_type = request.POST.get("booking_type", "recurring")
@@ -327,7 +329,7 @@ def book_coach_view(request, coach_id):
                 messages.error(request, "Please correct the errors below.")
 
         elif booking_type == "special":
-            special_form = SpecialBookingForm(request.POST)
+            special_form = SpecialBookingForm(request.POST, coach=coach)
             if special_form.is_valid():
                 slots = special_form.cleaned_data["selected_slots"]
                 hourly_rate = coach.hourly_rate or 10000
@@ -414,51 +416,52 @@ def book_coach_view(request, coach_id):
                 messages.error(request, "Please correct the errors below.")
 
         elif booking_type == "points":
-            points_form = PointsBookingForm(request.POST)
+            points_form = PointsBookingForm(request.POST, coach=coach)
             if points_form.is_valid():
                 slots = points_form.cleaned_data["selected_slots"]
                 points_cost = coach.points_cost or 1
                 total_cost = len(slots) * points_cost
 
-                if not has_sufficient_points(request.user, total_cost):
-                    messages.error(
-                        request,
-                        f"You need {total_cost} points but only have {get_balance(request.user)}. Please buy more points."
-                    )
-                else:
-                    created_bookings = []
-                    for slot in slots:
-                        session_date = dt_date.fromisoformat(slot["date"])
-                        start_time = datetime.strptime(slot["start_time"], "%H:%M").time()
-                        end_time = datetime.strptime(slot["end_time"], "%H:%M").time()
+                try:
+                    with transaction.atomic():
+                        created_bookings = []
+                        for slot in slots:
+                            session_date = dt_date.fromisoformat(slot["date"])
+                            start_time = datetime.strptime(slot["start_time"], "%H:%M").time()
+                            end_time = datetime.strptime(slot["end_time"], "%H:%M").time()
 
-                        flex_booking = FlexibleBooking.objects.create(
-                            user=request.user,
-                            coach=coach,
-                            session_date=session_date,
-                            start_time=start_time,
-                            end_time=end_time,
-                            day_of_week=slot["day_of_week"],
-                            points_used=points_cost,
-                            meeting_link=coach.meeting_link,
-                            student_notes=points_form.cleaned_data.get("student_notes", ""),
-                        )
-                        created_bookings.append(flex_booking)
+                            flex_booking = FlexibleBooking.objects.create(
+                                user=request.user,
+                                coach=coach,
+                                session_date=session_date,
+                                start_time=start_time,
+                                end_time=end_time,
+                                day_of_week=slot["day_of_week"],
+                                points_used=points_cost,
+                                meeting_link=coach.meeting_link,
+                                student_notes=points_form.cleaned_data.get("student_notes", ""),
+                            )
+                            created_bookings.append(flex_booking)
 
-                    if created_bookings:
                         use_points(
                             request.user,
                             total_cost,
                             flexible_booking=created_bookings[0],
                             description=f"Booked {len(created_bookings)} session(s) with {coach.name}",
                         )
-                        for flex_booking in created_bookings:
-                            send_flexible_booking_created(flex_booking)
-                        messages.success(
-                            request,
-                            f"Successfully booked {len(created_bookings)} session(s) with {coach.name}. Your remaining balance is {get_balance(request.user)} points."
-                        )
-                        return redirect("scheduling:flexible_booking_confirmation", booking_id=created_bookings[0].id)
+                except ValueError as exc:
+                    messages.error(
+                        request,
+                        f"You need {total_cost} points but only have {get_balance(request.user)}. Please buy more points."
+                    )
+                else:
+                    for flex_booking in created_bookings:
+                        send_flexible_booking_created(flex_booking)
+                    messages.success(
+                        request,
+                        f"Successfully booked {len(created_bookings)} session(s) with {coach.name}. Your remaining balance is {get_balance(request.user)} points."
+                    )
+                    return redirect("scheduling:flexible_booking_confirmation", booking_id=created_bookings[0].id)
             else:
                 messages.error(request, "Please correct the errors below.")
 
@@ -498,9 +501,101 @@ def book_coach_view(request, coach_id):
 
 
 @login_required
+def retry_booking_payment_view(request, booking_id):
+    from scheduling.models import Booking
+    from payments.paystack_service import initialize_transaction
+
+    booking = get_object_or_404(Booking, id=booking_id, student_email=request.user.email)
+
+    if booking.payment_status == "paid" or booking.status != "pending":
+        messages.info(request, "This booking is already paid or no longer pending.")
+        return redirect("accounts:dashboard")
+
+    if not booking.payment_reference:
+        booking.payment_reference = generate_reference(prefix="BK")
+        booking.save(update_fields=["payment_reference"])
+
+    callback_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+    result = initialize_transaction(
+        email=booking.student_email,
+        amount_kobo=int(booking.monthly_amount * 100),
+        reference=booking.payment_reference,
+        callback_url=callback_url,
+        metadata={
+            "booking_id": str(booking.id),
+            "type": "recurring_booking",
+            "coach_id": str(booking.coach.id),
+            "amount": str(booking.monthly_amount),
+        },
+    )
+
+    if result["success"]:
+        return render(request, "scheduling/booking_payment.html", {
+            "booking": booking,
+            "payment_reference": booking.payment_reference,
+            "authorization_url": result["authorization_url"],
+            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+        })
+    else:
+        messages.error(request, f"Could not start payment: {result['message']}")
+        return redirect("accounts:dashboard")
+
+
+@login_required
+def retry_special_payment_view(request, booking_id):
+    from scheduling.models import SpecialBooking
+    from payments.paystack_service import initialize_transaction
+
+    booking = get_object_or_404(
+        SpecialBooking,
+        id=booking_id,
+        student=request.user,
+    )
+
+    if booking.payment_status == "paid" or booking.status != "pending_payment":
+        messages.info(request, "This booking is already paid or no longer pending payment.")
+        return redirect("accounts:dashboard")
+
+    if not booking.payment_reference:
+        booking.payment_reference = generate_reference(prefix="SP")
+        booking.save(update_fields=["payment_reference"])
+
+    callback_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
+    result = initialize_transaction(
+        email=booking.student_email,
+        amount_kobo=int(booking.total_amount * 100),
+        reference=booking.payment_reference,
+        callback_url=callback_url,
+        metadata={
+            "booking_id": str(booking.id),
+            "type": "special_booking",
+            "coach_id": str(booking.coach.id),
+            "amount": str(booking.total_amount),
+        },
+    )
+
+    if result["success"]:
+        return render(request, "scheduling/special_booking_payment.html", {
+            "booking": booking,
+            "payment_reference": booking.payment_reference,
+            "authorization_url": result["authorization_url"],
+            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+        })
+    else:
+        messages.error(request, f"Could not start payment: {result['message']}")
+        return redirect("accounts:dashboard")
+
+
+@login_required
 def booking_confirmation_view(request, booking_id):
     from .models import Booking
     booking = get_object_or_404(Booking, id=booking_id)
+    if not (
+        request.user.is_superuser
+        or booking.student_email == request.user.email
+        or (booking.coach.user == request.user)
+    ):
+        raise PermissionDenied
     return render(request, "scheduling/booking_confirmation.html", {"booking": booking})
 
 
@@ -508,10 +603,23 @@ def booking_confirmation_view(request, booking_id):
 def flexible_booking_confirmation_view(request, booking_id):
     from .models import FlexibleBooking
     booking = get_object_or_404(FlexibleBooking, id=booking_id)
+    if not (
+        request.user.is_superuser
+        or booking.user == request.user
+        or (booking.coach.user == request.user)
+    ):
+        raise PermissionDenied
     return render(request, "scheduling/flexible_booking_confirmation.html", {"booking": booking})
 
 
 @login_required
 def special_booking_confirmation_view(request, booking_id):
     booking = get_object_or_404(SpecialBooking, id=booking_id)
+    if not (
+        request.user.is_superuser
+        or booking.student == request.user
+        or booking.student_email == request.user.email
+        or (booking.coach.user == request.user)
+    ):
+        raise PermissionDenied
     return render(request, "scheduling/special_booking_confirmation.html", {"booking": booking})

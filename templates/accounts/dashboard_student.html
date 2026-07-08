@@ -127,13 +127,54 @@
                                     </p>
                                     <p class="text-sm text-brand-500 mt-1">{{ booking.sessions_per_month }} sessions · ₦{{ booking.monthly_amount|floatformat:0|intcomma }}</p>
                                 </div>
-                                <span class="inline-flex items-center self-start px-3 py-1 rounded-full text-xs font-medium
-                                    {% if booking.status == 'pending' %}bg-yellow-100 text-yellow-700
-                                    {% elif booking.status == 'confirmed' %}bg-emerald-100 text-emerald-700
-                                    {% elif booking.status == 'rejected' %}bg-red-100 text-red-700
-                                    {% else %}bg-brand-100 text-brand-700{% endif %}">
-                                    {{ booking.status|title }}
-                                </span>
+                                <div class="flex flex-col items-end gap-2">
+                                    <span class="inline-flex items-center self-start px-3 py-1 rounded-full text-xs font-medium
+                                        {% if booking.status == 'pending' %}bg-yellow-100 text-yellow-700
+                                        {% elif booking.status == 'confirmed' %}bg-emerald-100 text-emerald-700
+                                        {% elif booking.status == 'rejected' %}bg-red-100 text-red-700
+                                        {% else %}bg-brand-100 text-brand-700{% endif %}">
+                                        {{ booking.status|title }}
+                                    </span>
+                                    {% if booking.status == 'pending' and booking.payment_status != 'paid' %}
+                                        <a href="{% url 'scheduling:retry_booking_payment' booking.id %}" class="text-sm font-medium text-brand-700 hover:text-brand-900 underline">
+                                            Pay Now
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Special Coaching Bookings -->
+        {% if special_bookings %}
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-brand-900 mb-4">Special Coaching Bookings</h2>
+                <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
+                    <div class="divide-y divide-brand-100">
+                        {% for booking in special_bookings %}
+                            <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <p class="font-semibold text-brand-900">{{ booking.coach.name }}</p>
+                                    <p class="text-sm text-brand-600 mt-1">{{ booking.total_sessions }} sessions · ₦{{ booking.total_amount|floatformat:0|intcomma }}</p>
+                                    <p class="text-sm text-brand-500 mt-1">Booked {{ booking.created_at|date:"M j, Y" }}</p>
+                                </div>
+                                <div class="flex flex-col items-end gap-2">
+                                    <span class="inline-flex items-center self-start px-3 py-1 rounded-full text-xs font-medium
+                                        {% if booking.status == 'pending_payment' %}bg-yellow-100 text-yellow-700
+                                        {% elif booking.status == 'confirmed' %}bg-emerald-100 text-emerald-700
+                                        {% elif booking.status == 'cancelled' %}bg-red-100 text-red-700
+                                        {% else %}bg-brand-100 text-brand-700{% endif %}">
+                                        {{ booking.get_status_display }}
+                                    </span>
+                                    {% if booking.status == 'pending_payment' %}
+                                        <a href="{% url 'scheduling:retry_special_payment' booking.id %}" class="text-sm font-medium text-brand-700 hover:text-brand-900 underline">
+                                            Pay Now
+                                        </a>
+                                    {% endif %}
+                                </div>
                             </div>
                         {% endfor %}
                     </div>

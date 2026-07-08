@@ -101,6 +101,7 @@ class PaystackCallbackTests(TestCase):
         self.tx.refresh_from_db()
         self.assertEqual(self.tx.status, "completed")
         self.assertEqual(get_balance(self.user), 4)
+        self.assertEqual(PointTransaction.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Your Points Purchase is Confirmed")
 
@@ -167,6 +168,7 @@ class PaystackWebhookTests(TestCase):
         self.tx.refresh_from_db()
         self.assertEqual(self.tx.status, "completed")
         self.assertEqual(get_balance(self.user), 6)
+        self.assertEqual(PointTransaction.objects.count(), 1)
 
     def test_webhook_rejects_invalid_signature(self):
         payload = {
@@ -304,6 +306,7 @@ class SpecialBookingPaymentCallbackTests(TestCase):
             "success": True,
             "status": "success",
             "reference": "SP-CALLBACK-123",
+            "amount": 1500000,
         }
         self.client.force_login(self.user)
         response = self.client.get(
@@ -493,7 +496,7 @@ class PointsAdminPageTests(TestCase):
         self.assertEqual(response.status_code, 302)
         points = UserPoints.objects.get(user=self.student)
         self.assertEqual(points.balance, 10)
-        tx = PointTransaction.objects.filter(type="purchase", amount=10).first()
+        tx = PointTransaction.objects.filter(type="bonus", amount=10).first()
         self.assertIsNotNone(tx)
         self.assertEqual(tx.status, "completed")
 

@@ -1,0 +1,45 @@
+.env
+.env.local
+.env.production
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.sqlite3
+db.sqlite3
+*.log
+media/
+staticfiles/
+node_modules/
+
+# Django
+*.mo
+local_settings.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache
+
+# Docker
+postgres_data/
+certbot_data/
+
+# Misc
+*.pem
+*.key
+*.crt

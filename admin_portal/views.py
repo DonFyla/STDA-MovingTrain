@@ -62,6 +62,16 @@ def _parse_time(value):
     return None
 
 
+def _parse_int(value, default=None):
+    """Safely parse an integer from a string, returning default on failure."""
+    if value is None:
+        return default
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return default
+
+
 def _count_sessions_this_week(week_start, week_end):
     """Count actual class sessions occurring this week across all booking types."""
     count = 0
@@ -217,8 +227,8 @@ def coach_edit_view(request, coach_id):
         coach.rank_title = request.POST.get("rank_title", "").strip()
         coach.meeting_link = request.POST.get("meeting_link", "").strip()
         coach.photo_url = request.POST.get("photo_url", "").strip()
-        coach.hourly_rate = int(request.POST.get("hourly_rate", coach.hourly_rate or 0)) or None
-        coach.points_cost = int(request.POST.get("points_cost", coach.points_cost or 1)) or 1
+        coach.hourly_rate = _parse_int(request.POST.get("hourly_rate"), default=coach.hourly_rate) or None
+        coach.points_cost = _parse_int(request.POST.get("points_cost"), default=coach.points_cost or 1) or 1
         coach.featured_order = request.POST.get("featured_order", "").strip() or None
         coach.is_special = request.POST.get("is_special") == "on"
         coach.is_admin = request.POST.get("is_admin") == "on"
@@ -284,7 +294,7 @@ def student_detail_view(request, student_id):
 @_admin_view
 def schedule_view(request):
     today = timezone.now().date()
-    week_offset = int(request.GET.get("week", 0) or 0)
+    week_offset = _parse_int(request.GET.get("week"), default=0) or 0
     week_start = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     week_end = week_start + timedelta(days=6)
 
