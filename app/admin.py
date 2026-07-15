@@ -1,15 +1,31 @@
 from django.contrib import admin
-from django.utils.decorators import method_decorator
-from django_ratelimit.decorators import ratelimit
+from django.http import HttpResponseForbidden
+from django_ratelimit.core import is_ratelimited
 
 
-# Rate-limit the default admin login view without replacing the admin site,
-# so all existing @admin.register() decorators continue to work.
-admin.site.login = method_decorator(
-    ratelimit(key="ip", rate="5/m", method="POST", block=True),
-    name="login",
-)(admin.site.login)
+class RateLimitedAdminSite(admin.AdminSite):
+    """Custom admin site with IP-based rate limiting on login."""
 
-site = admin.site
+    def login(self, request, extra_context=None):
+        if request.method == "POST":
+            if is_ratelimited(
+                request=request,
+                group="admin_login",
+                key="ip",
+                rate="5/m",
+                method="POST",
+                increment=True,
+            ):
+                return HttpResponseForbidden(
+                    "Too many login attempts. Try again later."
+                )
+        return super().login(request, extra_context=extra_context)
+
+
+site = RateLimitedAdminSite(name="admin")
+
+# Re-register any models already registered on the default admin site.
+for model, admin_class in admin.site._registry.items():
+    site.register(model, admin_class.__class__)
 
 __all__ = ["site"]
