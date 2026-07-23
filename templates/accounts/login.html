@@ -41,6 +41,12 @@
                     {% endif %}
                 </div>
 
+                <div class="text-right text-sm">
+                    <a href="{% url 'accounts:password_reset' %}" class="font-semibold text-brand-800 hover:underline">
+                        Forgot password?
+                    </a>
+                </div>
+
                 <button type="submit" class="w-full px-6 py-3 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors">
                     Login
                 </button>
