@@ -3,6 +3,29 @@
 
 {% block title %}{{ course.title }} - Moving Train Chess Academy{% endblock %}
 {% block meta_description %}{{ course.description }}{% endblock %}
+{% block og_title %}{{ course.title }} - Moving Train Chess Academy{% endblock %}
+{% block og_description %}{{ course.description }}{% endblock %}
+{% block twitter_title %}{{ course.title }} - Moving Train Chess Academy{% endblock %}
+{% block twitter_description %}{{ course.description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block extra_json_ld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Course",
+  "name": "{{ course.title|escapejs }}",
+  "description": "{{ course.description|escapejs }}",
+  "provider": {
+    "@type": "Organization",
+    "name": "{{ SITE_NAME }}",
+    "sameAs": "{{ request.scheme }}://{{ request.get_host }}"
+  },
+  "url": "{{ CANONICAL_URL }}",
+  "image": "{{ request.scheme }}://{{ request.get_host }}{% static course.image %}"
+}
+</script>
+{% endblock %}
 
 {% block content %}
 <!-- Hero -->

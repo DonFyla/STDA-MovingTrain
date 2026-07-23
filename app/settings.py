@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "django.contrib.sitemaps",
     "django_extensions",
     "widget_tweaks",
     "ckeditor",
@@ -64,6 +65,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "web.context_processors.navigation",
+                "web.context_processors.seo",
             ],
         },
     },
@@ -177,6 +179,19 @@ DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="bookings@themovingtra
 # Paystack
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
+
+# Google Tags / Ads (optional; loaded in base template when set)
+GOOGLE_TAG_MANAGER_ID = config("GOOGLE_TAG_MANAGER_ID", default="")
+GOOGLE_ANALYTICS_ID = config("GOOGLE_ANALYTICS_ID", default="")
+GOOGLE_ADS_CONVERSION_ID = config("GOOGLE_ADS_CONVERSION_ID", default="")
+GOOGLE_ADS_CONVERSION_LABEL = config("GOOGLE_ADS_CONVERSION_LABEL", default="")
+
+# Default brand metadata for SEO
+SITE_NAME = "Moving Train Chess Academy"
+SITE_DOMAIN = config("SITE_DOMAIN", default="themovingtrain.org")
+SITE_DEFAULT_IMAGE = config(
+    "SITE_DEFAULT_IMAGE", default="static/images/others/logo.svg"
+)
 
 # Security headers (enable in production)
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
