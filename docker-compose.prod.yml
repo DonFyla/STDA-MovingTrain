@@ -2,9 +2,11 @@ version: '3.9'
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,17 +19,37 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   web:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    command: gunicorn app.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    command: >
+      gunicorn app.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-3}
+      --threads ${GUNICORN_THREADS:-2}
+      --worker-class gthread
+      --worker-tmp-dir /dev/shm
+      --timeout ${GUNICORN_TIMEOUT:-60}
+      --keep-alive ${GUNICORN_KEEP_ALIVE:-5}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+      - logs_volume:/app/logs
+    env_file:
+      - .env
     environment:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY}
@@ -35,32 +57,40 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
-      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY}
-      - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
+      - FLUTTERWAVE_SECRET_KEY=${FLUTTERWAVE_SECRET_KEY}
+      - FLUTTERWAVE_PUBLIC_KEY=${FLUTTERWAVE_PUBLIC_KEY}
+      - FLUTTERWAVE_WEBHOOK_SECRET=${FLUTTERWAVE_WEBHOOK_SECRET}
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python manage.py check --deploy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static_volume:/usr/share/nginx/html/static
       - media_volume:/usr/share/nginx/html/media
       - certbot_data:/etc/letsencrypt
       - certbot_www:/var/www/certbot
     depends_on:
-      - web
+      web:
+        condition: service_healthy
     restart: unless-stopped
 
   certbot:
-    image: certbot/certbot:latest
+    image: certbot/certbot:v2.11.0
     volumes:
       - certbot_data:/etc/letsencrypt
       - certbot_www:/var/www/certbot
@@ -75,3 +105,4 @@ volumes:
   media_volume:
   certbot_data:
   certbot_www:
+  logs_volume:

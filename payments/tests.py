@@ -14,8 +14,8 @@ User = get_user_model()
 def _mock_initialize_success(*args, **kwargs):
     return {
         "success": True,
-        "authorization_url": "https://checkout.paystack.com/test-url",
-        "reference": kwargs.get("reference", "PTS-TEST"),
+        "authorization_url": "https://checkout.flutterwave.com/test-url",
+        "reference": kwargs.get("reference", "FLT-TEST"),
         "message": "Transaction initialized",
     }
 
@@ -48,8 +48,8 @@ class BuyPointsViewTests(TestCase):
             {"action": "buy_package", "points": "8", "price": "72000"},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Pay with Paystack")
-        self.assertContains(response, "https://checkout.paystack.com/test-url")
+        self.assertContains(response, "Pay with Flutterwave")
+        self.assertContains(response, "https://checkout.flutterwave.com/test-url")
         self.assertEqual(PointTransaction.objects.count(), 1)
         tx = PointTransaction.objects.first()
         self.assertEqual(tx.type, "purchase")
@@ -68,7 +68,7 @@ class BuyPointsViewTests(TestCase):
         self.assertEqual(tx.amount, 5)
 
 
-class PaystackCallbackTests(TestCase):
+class FlutterwaveCallbackTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             email="callback@example.com",
@@ -80,7 +80,7 @@ class PaystackCallbackTests(TestCase):
             type="purchase",
             amount=4,
             balance_after=0,
-            payment_reference="PTS-CALLBACK-123",
+            payment_reference="FLT-CALLBACK-123",
             description="Test purchase",
             status="pending",
         )
@@ -89,13 +89,13 @@ class PaystackCallbackTests(TestCase):
     def test_callback_credits_points_on_success(self, mock_verify):
         mock_verify.return_value = {
             "success": True,
-            "status": "success",
-            "reference": "PTS-CALLBACK-123",
+            "status": "successful",
+            "reference": "FLT-CALLBACK-123",
         }
         self.client.force_login(self.user)
         response = self.client.get(
-            reverse("payments:paystack_callback"),
-            {"reference": "PTS-CALLBACK-123"},
+            reverse("payments:flutterwave_callback"),
+            {"reference": "FLT-CALLBACK-123"},
         )
         self.assertEqual(response.status_code, 302)
         self.tx.refresh_from_db()
@@ -110,19 +110,19 @@ class PaystackCallbackTests(TestCase):
         mock_verify.return_value = {
             "success": True,
             "status": "failed",
-            "reference": "PTS-CALLBACK-123",
+            "reference": "FLT-CALLBACK-123",
         }
         self.client.force_login(self.user)
         response = self.client.get(
-            reverse("payments:paystack_callback"),
-            {"reference": "PTS-CALLBACK-123"},
+            reverse("payments:flutterwave_callback"),
+            {"reference": "FLT-CALLBACK-123"},
         )
         self.assertEqual(response.status_code, 302)
         self.tx.refresh_from_db()
         self.assertEqual(self.tx.status, "pending")
 
 
-class PaystackWebhookTests(TestCase):
+class FlutterwaveWebhookTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             email="webhook@example.com",
@@ -134,7 +134,7 @@ class PaystackWebhookTests(TestCase):
             type="purchase",
             amount=6,
             balance_after=0,
-            payment_reference="PTS-WEBHOOK-123",
+            payment_reference="FLT-WEBHOOK-123",
             description="Test purchase",
             status="pending",
         )
@@ -143,26 +143,27 @@ class PaystackWebhookTests(TestCase):
         import hashlib
         import hmac
         from django.conf import settings
+
         return hmac.new(
-            settings.PAYSTACK_SECRET_KEY.encode("utf-8"),
+            settings.FLUTTERWAVE_WEBHOOK_SECRET.encode("utf-8"),
             payload_bytes,
-            hashlib.sha512,
+            hashlib.sha256,
         ).hexdigest()
 
-    def test_webhook_credits_points_on_charge_success(self):
+    def test_webhook_credits_points_on_charge_completed(self):
         payload = {
-            "event": "charge.success",
+            "event": "charge.completed",
             "data": {
-                "reference": "PTS-WEBHOOK-123",
-                "status": "success",
+                "tx_ref": "FLT-WEBHOOK-123",
+                "status": "successful",
             },
         }
         body = json.dumps(payload).encode("utf-8")
         response = self.client.post(
-            reverse("payments:paystack_webhook"),
+            reverse("payments:flutterwave_webhook"),
             data=body,
             content_type="application/json",
-            HTTP_X_PAYSTACK_SIGNATURE=self._signature(body),
+            HTTP_VERIF_HASH=self._signature(body),
         )
         self.assertEqual(response.status_code, 200)
         self.tx.refresh_from_db()
@@ -172,20 +173,20 @@ class PaystackWebhookTests(TestCase):
 
     def test_webhook_rejects_invalid_signature(self):
         payload = {
-            "event": "charge.success",
-            "data": {"reference": "PTS-WEBHOOK-123", "status": "success"},
+            "event": "charge.completed",
+            "data": {"tx_ref": "FLT-WEBHOOK-123", "status": "successful"},
         }
         body = json.dumps(payload).encode("utf-8")
         response = self.client.post(
-            reverse("payments:paystack_webhook"),
+            reverse("payments:flutterwave_webhook"),
             data=body,
             content_type="application/json",
-            HTTP_X_PAYSTACK_SIGNATURE="invalid-signature",
+            HTTP_VERIF_HASH="invalid-signature",
         )
         self.assertEqual(response.status_code, 403)
 
     @patch("payments.webhook_views.verify_transaction")
-    def test_webhook_confirms_booking_on_charge_success(self, mock_verify):
+    def test_webhook_confirms_booking_on_charge_completed(self, mock_verify):
         from scheduling.models import Booking, Coach
 
         coach = Coach.objects.create(name="Webhook Coach", email="webhookcoach@example.com")
@@ -207,22 +208,22 @@ class PaystackWebhookTests(TestCase):
         mock_verify.return_value = {
             "success": True,
             "data": {
-                "status": "success",
-                "amount": 4000000,  # 40000 NGN in kobo
-                "reference": "BK-WEBHOOK-123",
+                "status": "successful",
+                "amount": 40000,  # 40000 NGN
+                "tx_ref": "BK-WEBHOOK-123",
             },
         }
 
         payload = {
-            "event": "charge.success",
-            "data": {"reference": "BK-WEBHOOK-123", "status": "success"},
+            "event": "charge.completed",
+            "data": {"tx_ref": "BK-WEBHOOK-123", "status": "successful"},
         }
         body = json.dumps(payload).encode("utf-8")
         response = self.client.post(
-            reverse("payments:paystack_webhook"),
+            reverse("payments:flutterwave_webhook"),
             data=body,
             content_type="application/json",
-            HTTP_X_PAYSTACK_SIGNATURE=self._signature(body),
+            HTTP_VERIF_HASH=self._signature(body),
         )
         self.assertEqual(response.status_code, 200)
         booking.refresh_from_db()
@@ -231,7 +232,7 @@ class PaystackWebhookTests(TestCase):
         self.assertIsNotNone(booking.payment_date)
 
     @patch("payments.webhook_views.verify_transaction")
-    def test_webhook_confirms_special_booking_on_charge_success(self, mock_verify):
+    def test_webhook_confirms_special_booking_on_charge_completed(self, mock_verify):
         from scheduling.models import SpecialBooking, Coach
 
         coach = Coach.objects.create(name="Special Webhook Coach", email="specialwebhookcoach@example.com")
@@ -253,22 +254,22 @@ class PaystackWebhookTests(TestCase):
         mock_verify.return_value = {
             "success": True,
             "data": {
-                "status": "success",
-                "amount": 3000000,  # 30000 NGN in kobo
-                "reference": "SP-WEBHOOK-123",
+                "status": "successful",
+                "amount": 30000,  # 30000 NGN
+                "tx_ref": "SP-WEBHOOK-123",
             },
         }
 
         payload = {
-            "event": "charge.success",
-            "data": {"reference": "SP-WEBHOOK-123", "status": "success"},
+            "event": "charge.completed",
+            "data": {"tx_ref": "SP-WEBHOOK-123", "status": "successful"},
         }
         body = json.dumps(payload).encode("utf-8")
         response = self.client.post(
-            reverse("payments:paystack_webhook"),
+            reverse("payments:flutterwave_webhook"),
             data=body,
             content_type="application/json",
-            HTTP_X_PAYSTACK_SIGNATURE=self._signature(body),
+            HTTP_VERIF_HASH=self._signature(body),
         )
         self.assertEqual(response.status_code, 200)
         booking.refresh_from_db()
@@ -304,9 +305,9 @@ class SpecialBookingPaymentCallbackTests(TestCase):
     def test_special_booking_callback_confirms_on_success(self, mock_verify):
         mock_verify.return_value = {
             "success": True,
-            "status": "success",
+            "status": "successful",
             "reference": "SP-CALLBACK-123",
-            "amount": 1500000,
+            "amount": 15000,
         }
         self.client.force_login(self.user)
         response = self.client.get(
@@ -387,7 +388,7 @@ class PointsAdminApproveTests(TestCase):
             type="purchase",
             amount=8,
             balance_after=0,
-            payment_reference="PTS-TEST-123",
+            payment_reference="FLT-TEST-123",
             description="Test purchase",
             status="pending",
         )
@@ -442,7 +443,7 @@ class PointsAdminPageTests(TestCase):
             type="purchase",
             amount=5,
             balance_after=0,
-            payment_reference="PTS-PAGE-123",
+            payment_reference="FLT-PAGE-123",
             description="Test pending purchase",
             status="pending",
         )
@@ -457,7 +458,7 @@ class PointsAdminPageTests(TestCase):
         response = self.client.get(reverse("payments:points_admin"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "payments/points_admin.html")
-        self.assertContains(response, "PTS-PAGE-123")
+        self.assertContains(response, "FLT-PAGE-123")
 
     def test_points_admin_approves_pending_transaction(self):
         self.client.force_login(self.admin_user)
@@ -510,55 +511,55 @@ class PointsAdminPageTests(TestCase):
         self.assertContains(response, "studentpage@example.com")
 
 
-class PaystackServiceTests(TestCase):
-    @patch("payments.paystack_service.requests.post")
-    @patch("payments.paystack_service.settings.PAYSTACK_SECRET_KEY", "sk_test_123")
+class FlutterwaveServiceTests(TestCase):
+    @patch("payments.flutterwave_service.requests.post")
+    @patch("payments.flutterwave_service.settings.FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST-123")
     def test_initialize_transaction_returns_url_on_success(self, mock_post):
         mock_post.return_value.json.return_value = {
-            "status": True,
+            "status": "success",
             "message": "Authorization URL created",
             "data": {
-                "authorization_url": "https://checkout.paystack.com/test",
-                "reference": "PTS-123",
+                "link": "https://checkout.flutterwave.com/test",
+                "tx_ref": "FLT-123",
             },
         }
         mock_post.return_value.raise_for_status = lambda: None
 
-        from payments.paystack_service import initialize_transaction
-        result = initialize_transaction("test@example.com", 100000, "PTS-123")
+        from payments.flutterwave_service import initialize_transaction
+        result = initialize_transaction("test@example.com", 1000, "FLT-123")
         self.assertTrue(result["success"])
-        self.assertEqual(result["authorization_url"], "https://checkout.paystack.com/test")
-        self.assertEqual(result["reference"], "PTS-123")
+        self.assertEqual(result["authorization_url"], "https://checkout.flutterwave.com/test")
+        self.assertEqual(result["reference"], "FLT-123")
 
-    @patch("payments.paystack_service.requests.post")
-    @patch("payments.paystack_service.settings.PAYSTACK_SECRET_KEY", "sk_test_123")
+    @patch("payments.flutterwave_service.requests.post")
+    @patch("payments.flutterwave_service.settings.FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST-123")
     def test_initialize_transaction_returns_error_on_failure(self, mock_post):
         from requests import HTTPError
         mock_response = mock_post.return_value
         mock_response.raise_for_status.side_effect = HTTPError("401 Unauthorized")
         mock_response.json.return_value = {"message": "Invalid key"}
 
-        from payments.paystack_service import initialize_transaction
-        result = initialize_transaction("test@example.com", 100000, "PTS-123")
+        from payments.flutterwave_service import initialize_transaction
+        result = initialize_transaction("test@example.com", 1000, "FLT-123")
         self.assertFalse(result["success"])
         self.assertIn("Invalid key", result["message"])
 
-    @patch("payments.paystack_service.requests.get")
-    @patch("payments.paystack_service.settings.PAYSTACK_SECRET_KEY", "sk_test_123")
+    @patch("payments.flutterwave_service.requests.get")
+    @patch("payments.flutterwave_service.settings.FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST-123")
     def test_verify_transaction_returns_status_on_success(self, mock_get):
         mock_get.return_value.json.return_value = {
-            "status": True,
+            "status": "success",
             "message": "Verification successful",
             "data": {
-                "status": "success",
-                "amount": 100000,
-                "reference": "PTS-123",
+                "status": "successful",
+                "amount": 1000,
+                "tx_ref": "FLT-123",
                 "customer": {"email": "test@example.com"},
             },
         }
         mock_get.return_value.raise_for_status = lambda: None
 
-        from payments.paystack_service import verify_transaction
-        result = verify_transaction("PTS-123")
+        from payments.flutterwave_service import verify_transaction
+        result = verify_transaction("FLT-123")
         self.assertTrue(result["success"])
-        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["status"], "successful")

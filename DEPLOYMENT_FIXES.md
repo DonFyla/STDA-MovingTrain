@@ -169,7 +169,7 @@ These affect money, data integrity, or security.
 - [ ] Static files build and collect correctly (`npm run build:css`, `collectstatic`)
 - [ ] Migrations run cleanly on production DB
 - [ ] HTTPS/cookie security flags configured
-- [ ] Paystack webhook endpoint reachable and verified
+- [ ] Flutterwave webhook endpoint reachable and verified
 - [ ] Backups configured
 
 ---
@@ -191,10 +191,10 @@ SECRET_KEY=<strong-key> DEBUG=False ALLOWED_HOSTS=yourdomain.com \
 ## Remaining Work Before Going Fully Live
 
 1. **SSL/TLS**: Configure nginx with real certificates or use an upstream SSL terminator.
-2. **Production env**: Create `.env` with strong secrets, production hosts, and email/Paystack credentials.
+2. **Production env**: Create `.env` with strong secrets, production hosts, and email/Flutterwave credentials.
 3. **Rate limiting**: Add Django Ratelimit or nginx rate limiting.
 4. **Static build**: Run `npm run build:css` and `python manage.py collectstatic` before building the Docker image.
-5. **Paystack webhook**: Set the webhook URL in Paystack dashboard and verify signature handling.
+5. **Flutterwave webhook**: Set the webhook URL in Flutterwave dashboard and verify signature handling.
 6. **Backups**: Configure PostgreSQL backups.
 7. **CKEditor**: Plan migration to a maintained editor.
 

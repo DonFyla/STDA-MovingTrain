@@ -16,7 +16,7 @@ from .emails import (
     send_flexible_booking_created,
     send_special_booking_created,
 )
-from payments.paystack_service import generate_reference, initialize_transaction
+from payments.flutterwave_service import generate_reference, initialize_transaction
 
 
 DAY_ORDER = [
@@ -282,10 +282,10 @@ def book_coach_view(request, coach_id):
             if recurring_form.is_valid():
                 booking = recurring_form.save(coach=coach)
 
-                # Initialize Paystack payment for the recurring booking
+                # Initialize Flutterwave payment for the recurring booking
                 payment_reference = generate_reference(prefix="BK")
-                amount_kobo = int(booking.monthly_amount * 100)
-                callback_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+                amount = int(booking.monthly_amount)
+                redirect_url = request.build_absolute_uri(reverse("payments:booking_callback"))
 
                 booking.payment_reference = payment_reference
                 booking.payment_amount = booking.monthly_amount
@@ -296,9 +296,9 @@ def book_coach_view(request, coach_id):
 
                 result = initialize_transaction(
                     email=booking.student_email,
-                    amount_kobo=amount_kobo,
+                    amount=amount,
                     reference=payment_reference,
-                    callback_url=callback_url,
+                    redirect_url=redirect_url,
                     metadata={
                         "booking_id": str(booking.id),
                         "type": "recurring_booking",
@@ -312,7 +312,7 @@ def book_coach_view(request, coach_id):
                         "booking": booking,
                         "payment_reference": payment_reference,
                         "authorization_url": result["authorization_url"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
                 else:
                     messages.error(
@@ -322,8 +322,8 @@ def book_coach_view(request, coach_id):
                     return render(request, "scheduling/booking_payment.html", {
                         "booking": booking,
                         "payment_reference": payment_reference,
-                        "paystack_error": result["message"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_error": result["message"],
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
             else:
                 messages.error(request, "Please correct the errors below.")
@@ -377,15 +377,14 @@ def book_coach_view(request, coach_id):
 
                 send_special_booking_created(special_booking)
 
-                # Initialize Paystack payment for the special booking
-                amount_kobo = int(total_amount * 100)
-                callback_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
+                # Initialize Flutterwave payment for the special booking
+                redirect_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
 
                 result = initialize_transaction(
                     email=special_booking.student_email,
-                    amount_kobo=amount_kobo,
+                    amount=total_amount,
                     reference=payment_reference,
-                    callback_url=callback_url,
+                    redirect_url=redirect_url,
                     metadata={
                         "booking_id": str(special_booking.id),
                         "type": "special_booking",
@@ -399,7 +398,7 @@ def book_coach_view(request, coach_id):
                         "booking": special_booking,
                         "payment_reference": payment_reference,
                         "authorization_url": result["authorization_url"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
                 else:
                     messages.error(
@@ -409,8 +408,8 @@ def book_coach_view(request, coach_id):
                     return render(request, "scheduling/special_booking_payment.html", {
                         "booking": special_booking,
                         "payment_reference": payment_reference,
-                        "paystack_error": result["message"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_error": result["message"],
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
             else:
                 messages.error(request, "Please correct the errors below.")
@@ -503,7 +502,7 @@ def book_coach_view(request, coach_id):
 @login_required
 def retry_booking_payment_view(request, booking_id):
     from scheduling.models import Booking
-    from payments.paystack_service import initialize_transaction
+    from payments.flutterwave_service import initialize_transaction
 
     booking = get_object_or_404(Booking, id=booking_id, student_email=request.user.email)
 
@@ -515,12 +514,12 @@ def retry_booking_payment_view(request, booking_id):
         booking.payment_reference = generate_reference(prefix="BK")
         booking.save(update_fields=["payment_reference"])
 
-    callback_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+    redirect_url = request.build_absolute_uri(reverse("payments:booking_callback"))
     result = initialize_transaction(
         email=booking.student_email,
-        amount_kobo=int(booking.monthly_amount * 100),
+        amount=int(booking.monthly_amount),
         reference=booking.payment_reference,
-        callback_url=callback_url,
+        redirect_url=redirect_url,
         metadata={
             "booking_id": str(booking.id),
             "type": "recurring_booking",
@@ -534,7 +533,7 @@ def retry_booking_payment_view(request, booking_id):
             "booking": booking,
             "payment_reference": booking.payment_reference,
             "authorization_url": result["authorization_url"],
-            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+            "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
         })
     else:
         messages.error(request, f"Could not start payment: {result['message']}")
@@ -544,7 +543,7 @@ def retry_booking_payment_view(request, booking_id):
 @login_required
 def retry_special_payment_view(request, booking_id):
     from scheduling.models import SpecialBooking
-    from payments.paystack_service import initialize_transaction
+    from payments.flutterwave_service import initialize_transaction
 
     booking = get_object_or_404(
         SpecialBooking,
@@ -560,12 +559,12 @@ def retry_special_payment_view(request, booking_id):
         booking.payment_reference = generate_reference(prefix="SP")
         booking.save(update_fields=["payment_reference"])
 
-    callback_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
+    redirect_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
     result = initialize_transaction(
         email=booking.student_email,
-        amount_kobo=int(booking.total_amount * 100),
+        amount=booking.total_amount,
         reference=booking.payment_reference,
-        callback_url=callback_url,
+        redirect_url=redirect_url,
         metadata={
             "booking_id": str(booking.id),
             "type": "special_booking",
@@ -579,7 +578,7 @@ def retry_special_payment_view(request, booking_id):
             "booking": booking,
             "payment_reference": booking.payment_reference,
             "authorization_url": result["authorization_url"],
-            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+            "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
         })
     else:
         messages.error(request, f"Could not start payment: {result['message']}")

@@ -14,7 +14,7 @@ User = get_user_model()
 def _mock_initialize_success(*args, **kwargs):
     return {
         "success": True,
-        "authorization_url": "https://checkout.paystack.com/test-booking-url",
+        "authorization_url": "https://checkout.flutterwave.com/test-booking-url",
         "reference": kwargs.get("reference", "BK-TEST"),
         "message": "Transaction initialized",
     }
@@ -370,7 +370,7 @@ class BookingFlowTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "scheduling/booking_payment.html")
-        self.assertContains(response, "https://checkout.paystack.com/test-booking-url")
+        self.assertContains(response, "https://checkout.flutterwave.com/test-booking-url")
         self.assertEqual(Booking.objects.count(), 1)
         booking = Booking.objects.first()
         self.assertEqual(booking.coach, self.coach)
@@ -611,9 +611,9 @@ class BookingPaymentTests(TestCase):
     def test_booking_callback_confirms_booking_on_success(self, mock_verify):
         mock_verify.return_value = {
             "success": True,
-            "status": "success",
+            "status": "successful",
             "reference": "BK-CALLBACK-123",
-            "amount": 4000000,
+            "amount": 40000,
         }
         self.client.force_login(self.student_user)
         response = self.client.get(
@@ -980,7 +980,7 @@ class SpecialBookingFlowTests(TestCase):
         self.assertTrue(booking.payment_reference.startswith("SP-"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "scheduling/special_booking_payment.html")
-        self.assertContains(response, "https://checkout.paystack.com/test-booking-url")
+        self.assertContains(response, "https://checkout.flutterwave.com/test-booking-url")
         self.assertEqual(len(mail.outbox), 2)
         subjects = [m.subject for m in mail.outbox]
         self.assertIn("Your Special Coaching Booking is Reserved! Complete Payment to Confirm", subjects)

@@ -12,6 +12,7 @@ __pycache__/
 *.sqlite3
 db.sqlite3
 *.log
+logs/
 media/
 staticfiles/
 node_modules/

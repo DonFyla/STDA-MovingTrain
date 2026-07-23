@@ -1,4 +1,6 @@
 import logging
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
@@ -8,7 +10,7 @@ from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
 from .models import PointTransaction
 from .points_service import get_balance
-from .paystack_service import initialize_transaction, verify_transaction, generate_reference
+from .flutterwave_service import initialize_transaction, verify_transaction, generate_reference
 from .emails import send_points_purchased
 from scheduling.emails import (
     send_recurring_booking_confirmed,
@@ -48,8 +50,8 @@ def buy_points_view(request):
     selected_package = None
     payment_reference = None
     authorization_url = None
-    paystack_public_key = settings.PAYSTACK_PUBLIC_KEY
-    paystack_error = None
+    flutterwave_public_key = settings.FLUTTERWAVE_PUBLIC_KEY
+    flutterwave_error = None
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -59,12 +61,12 @@ def buy_points_view(request):
                 points = int(request.POST.get("points", 0))
                 price = int(request.POST.get("price", 0))
             except (TypeError, ValueError):
-                paystack_error = "Invalid package selection."
+                flutterwave_error = "Invalid package selection."
                 points = 0
                 price = 0
             selected_package = next((p for p in POINT_PACKAGES if p["points"] == points), None)
             if not selected_package or selected_package["price"] != price:
-                paystack_error = "Selected package is not valid."
+                flutterwave_error = "Selected package is not valid."
                 selected_package = None
 
         elif action == "buy_custom":
@@ -73,14 +75,14 @@ def buy_points_view(request):
             except (TypeError, ValueError):
                 points = 0
             if points < 1:
-                paystack_error = "Please enter a valid amount."
+                flutterwave_error = "Please enter a valid amount."
             else:
                 price = points * PRICE_PER_POINT
                 selected_package = {"points": points, "price": price, "label": "Custom"}
 
-        if selected_package and not paystack_error:
+        if selected_package and not flutterwave_error:
             payment_reference = generate_reference()
-            callback_url = request.build_absolute_uri(reverse("payments:paystack_callback"))
+            redirect_url = request.build_absolute_uri(reverse("payments:flutterwave_callback"))
 
             # Create pending transaction first
             PointTransaction.objects.create(
@@ -94,18 +96,18 @@ def buy_points_view(request):
             )
 
             logger.info(
-                "Initializing Paystack for user %s, ref %s, amount %s kobo, key configured=%s",
+                "Initializing Flutterwave for user %s, ref %s, amount %s NGN, key configured=%s",
                 request.user.email,
                 payment_reference,
-                selected_package["price"] * 100,
-                bool(settings.PAYSTACK_SECRET_KEY),
+                selected_package["price"],
+                bool(settings.FLUTTERWAVE_SECRET_KEY),
             )
 
             result = initialize_transaction(
                 email=request.user.email,
-                amount_kobo=selected_package["price"] * 100,
+                amount=selected_package["price"],
                 reference=payment_reference,
-                callback_url=callback_url,
+                redirect_url=redirect_url,
                 metadata={
                     "points": selected_package["points"],
                     "price": selected_package["price"],
@@ -117,8 +119,8 @@ def buy_points_view(request):
             if result["success"]:
                 authorization_url = result["authorization_url"]
             else:
-                paystack_error = f"Could not start payment: {result['message']}"
-                logger.error("Paystack initialize failed for user %s: %s", request.user.email, result.get("message"))
+                flutterwave_error = f"Could not start payment: {result['message']}"
+                logger.error("Flutterwave initialize failed for user %s: %s", request.user.email, result.get("message"))
                 # Clean up the failed pending transaction
                 PointTransaction.objects.filter(
                     payment_reference=payment_reference, status="pending"
@@ -133,17 +135,17 @@ def buy_points_view(request):
         "selected_package": selected_package,
         "payment_reference": payment_reference,
         "authorization_url": authorization_url,
-        "paystack_public_key": paystack_public_key,
-        "paystack_error": paystack_error,
+        "flutterwave_public_key": flutterwave_public_key,
+        "flutterwave_error": flutterwave_error,
     }
     return render(request, "payments/buy_points.html", context)
 
 
 @login_required
 @ratelimit(key="ip", rate="10/m", method="GET", block=True)
-def paystack_callback_view(request):
-    """Handle Paystack redirect after payment."""
-    reference = request.GET.get("reference")
+def flutterwave_callback_view(request):
+    """Handle Flutterwave redirect after payment."""
+    reference = request.GET.get("reference") or request.GET.get("tx_ref")
     if not reference:
         messages.error(request, "No payment reference provided.")
         return redirect("payments:buy_points")
@@ -162,7 +164,7 @@ def paystack_callback_view(request):
         messages.error(request, "Payment record not found.")
         return redirect("payments:buy_points")
 
-    if status == "success":
+    if status == "successful":
         if tx.status == "pending":
             from payments.points_service import complete_pending_transaction
             complete_pending_transaction(tx)
@@ -172,7 +174,7 @@ def paystack_callback_view(request):
             f"Payment successful! {tx.amount} points have been added to your balance.",
         )
         return redirect("accounts:dashboard")
-    elif status == "abandoned":
+    elif status in ("cancelled", "abandoned"):
         messages.warning(request, "Payment was not completed. You can try again.")
         return redirect("payments:buy_points")
     else:
@@ -183,10 +185,10 @@ def paystack_callback_view(request):
 @login_required
 @ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def booking_callback_view(request):
-    """Handle Paystack redirect after payment for a recurring class booking."""
+    """Handle Flutterwave redirect after payment for a recurring class booking."""
     from scheduling.models import Booking
 
-    reference = request.GET.get("reference")
+    reference = request.GET.get("reference") or request.GET.get("tx_ref")
     if not reference:
         messages.error(request, "No payment reference provided.")
         return redirect("accounts:dashboard")
@@ -205,10 +207,16 @@ def booking_callback_view(request):
         messages.error(request, "Booking record not found.")
         return redirect("accounts:dashboard")
 
-    if status == "success":
-        expected_kobo = int(booking.monthly_amount * 100)
-        actual_kobo = result.get("amount") or result.get("data", {}).get("amount") or 0
-        if actual_kobo != expected_kobo:
+    if status == "successful":
+        expected_amount = Decimal(str(booking.monthly_amount))
+        actual_amount = Decimal(str(result.get("amount") or result.get("data", {}).get("amount") or 0))
+        if actual_amount != expected_amount:
+            logger.warning(
+                "Amount mismatch for booking %s: expected %s, got %s",
+                booking.id,
+                expected_amount,
+                actual_amount,
+            )
             messages.error(
                 request,
                 "Payment amount mismatch. Please contact support."
@@ -226,7 +234,7 @@ def booking_callback_view(request):
             f"Payment successful! Your recurring booking with {booking.coach.name} is confirmed.",
         )
         return redirect("scheduling:booking_confirmation", booking_id=booking.id)
-    elif status == "abandoned":
+    elif status in ("cancelled", "abandoned"):
         messages.warning(request, "Payment was not completed. You can retry from your dashboard.")
         return redirect("accounts:dashboard")
     else:
@@ -237,10 +245,10 @@ def booking_callback_view(request):
 @login_required
 @ratelimit(key="ip", rate="10/m", method="GET", block=True)
 def special_booking_callback_view(request):
-    """Handle Paystack redirect after payment for a special coaching booking."""
+    """Handle Flutterwave redirect after payment for a special coaching booking."""
     from scheduling.models import SpecialBooking
 
-    reference = request.GET.get("reference")
+    reference = request.GET.get("reference") or request.GET.get("tx_ref")
     if not reference:
         messages.error(request, "No payment reference provided.")
         return redirect("accounts:dashboard")
@@ -259,10 +267,16 @@ def special_booking_callback_view(request):
         messages.error(request, "Special booking record not found.")
         return redirect("accounts:dashboard")
 
-    if status == "success":
-        expected_kobo = int(booking.total_amount * 100)
-        actual_kobo = result.get("amount") or result.get("data", {}).get("amount") or 0
-        if actual_kobo != expected_kobo:
+    if status == "successful":
+        expected_amount = Decimal(str(booking.total_amount))
+        actual_amount = Decimal(str(result.get("amount") or result.get("data", {}).get("amount") or 0))
+        if actual_amount != expected_amount:
+            logger.warning(
+                "Amount mismatch for special booking %s: expected %s, got %s",
+                booking.id,
+                expected_amount,
+                actual_amount,
+            )
             messages.error(
                 request,
                 "Payment amount mismatch. Please contact support."
@@ -280,7 +294,7 @@ def special_booking_callback_view(request):
             f"Payment successful! Your special coaching with {booking.coach.name} is confirmed.",
         )
         return redirect("scheduling:special_booking_confirmation", booking_id=booking.id)
-    elif status == "abandoned":
+    elif status in ("cancelled", "abandoned"):
         messages.warning(request, "Payment was not completed. You can retry from your dashboard.")
         return redirect("accounts:dashboard")
     else:

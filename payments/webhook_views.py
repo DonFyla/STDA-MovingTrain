@@ -1,36 +1,38 @@
 import hashlib
 import hmac
 import json
+from decimal import Decimal
+
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .models import PointTransaction
-from .paystack_service import verify_transaction
+from .flutterwave_service import verify_transaction, verify_webhook_signature
 
 
 @csrf_exempt
 @require_POST
-def paystack_webhook_view(request):
+def flutterwave_webhook_view(request):
     """
-    Handle Paystack webhook events.
-    Paystack sends a signed POST request with event data.
+    Handle Flutterwave webhook events.
+    Flutterwave sends a signed POST request with event data.
     """
-    secret_key = settings.PAYSTACK_SECRET_KEY
+    secret_key = settings.FLUTTERWAVE_SECRET_KEY
     if not secret_key:
-        return JsonResponse({"status": "error", "message": "Paystack not configured"}, status=503)
+        return JsonResponse(
+            {"status": "error", "message": "Flutterwave not configured"},
+            status=503,
+        )
 
     # Verify signature
-    signature = request.headers.get("x-paystack-signature", "")
-    expected_signature = hmac.new(
-        secret_key.encode("utf-8"),
-        request.body,
-        hashlib.sha512,
-    ).hexdigest()
-
-    if not hmac.compare_digest(signature, expected_signature):
-        return JsonResponse({"status": "error", "message": "Invalid signature"}, status=403)
+    signature = request.headers.get("verif-hash", "")
+    if not verify_webhook_signature(request.body, signature):
+        return JsonResponse(
+            {"status": "error", "message": "Invalid signature"},
+            status=403,
+        )
 
     try:
         payload = json.loads(request.body)
@@ -40,15 +42,18 @@ def paystack_webhook_view(request):
     event = payload.get("event")
     data = payload.get("data", {})
 
-    if event == "charge.success":
-        reference = data.get("reference")
+    if event == "charge.completed":
+        reference = data.get("tx_ref")
         status = data.get("status")
 
-        if status == "success" and reference:
+        if status == "successful" and reference:
             # 1. Try points purchase
             try:
-                tx = PointTransaction.objects.get(payment_reference=reference, status="pending")
+                tx = PointTransaction.objects.get(
+                    payment_reference=reference, status="pending"
+                )
                 from payments.points_service import complete_pending_transaction
+
                 complete_pending_transaction(tx)
                 return JsonResponse({"status": "ok"})
             except PointTransaction.DoesNotExist:
@@ -57,18 +62,24 @@ def paystack_webhook_view(request):
             # 2. Try recurring class booking
             try:
                 from scheduling.models import Booking
-                booking = Booking.objects.get(payment_reference=reference, payment_status="pending")
+
+                booking = Booking.objects.get(
+                    payment_reference=reference, payment_status="pending"
+                )
 
                 # Verify amount matches to protect against tampering
                 verified = verify_transaction(reference)
-                if verified.get("success") and verified.get("data", {}).get("status") == "success":
-                    expected_kobo = int(booking.monthly_amount * 100)
-                    actual_kobo = verified["data"].get("amount", 0)
-                    if actual_kobo == expected_kobo:
+                tx_data = verified.get("data", {})
+                if verified.get("success") and tx_data.get("status") == "successful":
+                    expected_amount = Decimal(str(booking.monthly_amount))
+                    actual_amount = Decimal(str(tx_data.get("amount", 0)))
+                    if actual_amount == expected_amount:
                         booking.payment_status = "paid"
                         booking.payment_date = timezone.now()
                         booking.status = "confirmed"
-                        booking.save(update_fields=["payment_status", "payment_date", "status"])
+                        booking.save(
+                            update_fields=["payment_status", "payment_date", "status"]
+                        )
                         return JsonResponse({"status": "ok"})
             except Booking.DoesNotExist:
                 pass
@@ -76,17 +87,23 @@ def paystack_webhook_view(request):
             # 3. Try special coaching booking
             try:
                 from scheduling.models import SpecialBooking
-                booking = SpecialBooking.objects.get(payment_reference=reference, payment_status="pending")
+
+                booking = SpecialBooking.objects.get(
+                    payment_reference=reference, payment_status="pending"
+                )
 
                 verified = verify_transaction(reference)
-                if verified.get("success") and verified.get("data", {}).get("status") == "success":
-                    expected_kobo = int(booking.total_amount * 100)
-                    actual_kobo = verified["data"].get("amount", 0)
-                    if actual_kobo == expected_kobo:
+                tx_data = verified.get("data", {})
+                if verified.get("success") and tx_data.get("status") == "successful":
+                    expected_amount = Decimal(str(booking.total_amount))
+                    actual_amount = Decimal(str(tx_data.get("amount", 0)))
+                    if actual_amount == expected_amount:
                         booking.payment_status = "paid"
                         booking.payment_date = timezone.now()
                         booking.status = "confirmed"
-                        booking.save(update_fields=["payment_status", "payment_date", "status"])
+                        booking.save(
+                            update_fields=["payment_status", "payment_date", "status"]
+                        )
                         return JsonResponse({"status": "ok"})
             except SpecialBooking.DoesNotExist:
                 pass
