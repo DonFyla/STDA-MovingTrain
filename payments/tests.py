@@ -277,6 +277,104 @@ class FlutterwaveWebhookTests(TestCase):
         self.assertEqual(booking.payment_status, "paid")
         self.assertIsNotNone(booking.payment_date)
 
+    @patch("payments.webhook_views.verify_transaction")
+    def test_webhook_renews_subscription_on_charge_completed(self, mock_verify):
+        from scheduling.models import Booking, Coach
+
+        coach = Coach.objects.create(name="Subscription Coach", email="subcoach@example.com")
+        booking = Booking.objects.create(
+            coach=coach,
+            student_name="Subscription Student",
+            student_email="substudent@example.com",
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            payment_reference="BK-SUB-INITIAL",
+            flutterwave_payment_plan_id="3807",
+            payment_status="paid",
+            status="confirmed",
+            subscription_status="active",
+        )
+        mock_verify.return_value = {
+            "success": True,
+            "data": {
+                "status": "successful",
+                "amount": 40000,
+                "tx_ref": "BK-SUB-RENEWAL-123",
+                "subscription_id": "sub_999",
+            },
+        }
+
+        payload = {
+            "event": "charge.completed",
+            "data": {
+                "tx_ref": "BK-SUB-RENEWAL-123",
+                "status": "successful",
+                "plan_id": "3807",
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        response = self.client.post(
+            reverse("payments:flutterwave_webhook"),
+            data=body,
+            content_type="application/json",
+            HTTP_VERIF_HASH=self._signature(body),
+        )
+        self.assertEqual(response.status_code, 200)
+        booking.refresh_from_db()
+        self.assertEqual(booking.subscription_status, "active")
+        self.assertEqual(booking.flutterwave_subscription_id, "sub_999")
+        self.assertIsNotNone(booking.payment_date)
+        self.assertIsNotNone(booking.next_billing_date)
+
+    def test_webhook_cancels_subscription_on_subscription_cancelled(self):
+        from scheduling.models import Booking, Coach
+
+        coach = Coach.objects.create(name="Cancel Coach", email="cancelcoach@example.com")
+        booking = Booking.objects.create(
+            coach=coach,
+            student_name="Cancel Student",
+            student_email="cancelstudent@example.com",
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            flutterwave_payment_plan_id="3807",
+            flutterwave_subscription_id="sub_123",
+            payment_status="paid",
+            status="confirmed",
+            subscription_status="active",
+        )
+
+        payload = {
+            "event": "subscription.cancelled",
+            "data": {
+                "status": "deactivated",
+                "plan": {
+                    "id": 3807,
+                    "status": "cancel",
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        response = self.client.post(
+            reverse("payments:flutterwave_webhook"),
+            data=body,
+            content_type="application/json",
+            HTTP_VERIF_HASH=self._signature(body),
+        )
+        self.assertEqual(response.status_code, 200)
+        booking.refresh_from_db()
+        self.assertEqual(booking.subscription_status, "cancelled")
+        self.assertEqual(booking.status, "cancelled")
+
 
 class SpecialBookingPaymentCallbackTests(TestCase):
     def setUp(self):

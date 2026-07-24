@@ -139,6 +139,12 @@ class Booking(models.Model):
         ("double", "Double"),
     ]
 
+    SUBSCRIPTION_STATUS_CHOICES = [
+        ("active", "Active"),
+        ("cancelled", "Cancelled"),
+        ("expired", "Expired"),
+    ]
+
     COURSE_TYPE_CHOICES = [
         ("beginner", "Beginner"),
         ("intermediate", "Intermediate"),
@@ -180,6 +186,19 @@ class Booking(models.Model):
         max_digits=10, decimal_places=2, blank=True, null=True
     )
     payment_reference = models.CharField(max_length=255, blank=True, default="")
+    flutterwave_payment_plan_id = models.CharField(
+        max_length=255, blank=True, default=""
+    )
+    flutterwave_subscription_id = models.CharField(
+        max_length=255, blank=True, default=""
+    )
+    subscription_status = models.CharField(
+        max_length=20,
+        choices=SUBSCRIPTION_STATUS_CHOICES,
+        blank=True,
+        default="",
+    )
+    next_billing_date = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

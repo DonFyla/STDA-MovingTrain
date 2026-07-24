@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -227,7 +228,21 @@ def booking_callback_view(request):
             booking.payment_status = "paid"
             booking.payment_date = timezone.now()
             booking.status = "confirmed"
-            booking.save(update_fields=["payment_status", "payment_date", "status"])
+            booking.subscription_status = "active"
+            booking.next_billing_date = timezone.now() + timedelta(days=30)
+            tx_data = result.get("data", {})
+            if tx_data.get("subscription_id"):
+                booking.flutterwave_subscription_id = str(tx_data["subscription_id"])
+            booking.save(
+                update_fields=[
+                    "payment_status",
+                    "payment_date",
+                    "status",
+                    "subscription_status",
+                    "next_billing_date",
+                    "flutterwave_subscription_id",
+                ]
+            )
             send_recurring_booking_confirmed(booking)
         messages.success(
             request,

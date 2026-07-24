@@ -15,7 +15,11 @@
         <div class="max-w-2xl mx-auto">
             <div class="text-center mb-10">
                 <h1 class="text-3xl md:text-4xl font-bold text-brand-900 mb-4">Complete Your Booking</h1>
-                <p class="text-lg text-brand-600">You're almost there! Pay securely with Flutterwave to confirm your recurring classes.</p>
+                {% if is_subscription %}
+                    <p class="text-lg text-brand-600">You're almost there! Enter your card details to start a monthly subscription. Your card will be charged ₦{{ booking.monthly_amount|floatformat:0|intcomma }} now and automatically every month until you cancel.</p>
+                {% else %}
+                    <p class="text-lg text-brand-600">You're almost there! Pay securely with Flutterwave to confirm your recurring classes.</p>
+                {% endif %}
             </div>
 
             {% if flutterwave_error %}

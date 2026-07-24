@@ -12,4 +12,5 @@ urlpatterns = [
     path("book/special-confirmation/<uuid:booking_id>/", views.special_booking_confirmation_view, name="special_booking_confirmation"),
     path("book/retry-payment/<uuid:booking_id>/", views.retry_booking_payment_view, name="retry_booking_payment"),
     path("book/retry-special-payment/<uuid:booking_id>/", views.retry_special_payment_view, name="retry_special_payment"),
+    path("book/cancel-subscription/<uuid:booking_id>/", views.cancel_subscription_view, name="cancel_subscription"),
 ]

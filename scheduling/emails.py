@@ -203,3 +203,27 @@ def send_special_booking_cancelled(booking):
             template_name="emails/booking/special_cancelled_coach.html",
             context=context,
         )
+
+
+def send_recurring_payment_received(booking):
+    """Notify student and coach when a recurring subscription payment is received."""
+    context = {
+        "booking": booking,
+        "student": booking.student_name,
+        "coach": booking.coach,
+    }
+
+    _send_email(
+        subject="Monthly Subscription Payment Received",
+        to_emails=booking.student_email,
+        template_name="emails/booking/recurring_payment_received_student.html",
+        context=context,
+    )
+
+    if booking.coach.email:
+        _send_email(
+            subject=f"Monthly Payment Received - {booking.student_name}",
+            to_emails=booking.coach.email,
+            template_name="emails/booking/recurring_payment_received_coach.html",
+            context=context,
+        )

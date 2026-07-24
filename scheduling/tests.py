@@ -20,6 +20,15 @@ def _mock_initialize_success(*args, **kwargs):
     }
 
 
+def _mock_create_payment_plan(*args, **kwargs):
+    return {
+        "success": True,
+        "plan_id": 3807,
+        "data": {"id": 3807},
+        "message": "Payment plan created",
+    }
+
+
 class CoachDashboardTests(TestCase):
     def setUp(self):
         self.coach_user = User.objects.create_user(
@@ -352,8 +361,9 @@ class BookingFlowTests(TestCase):
         self.assertTemplateUsed(response, "scheduling/book_coach.html")
         self.assertContains(response, self.coach.name)
 
+    @patch("scheduling.views.create_payment_plan", side_effect=_mock_create_payment_plan)
     @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
-    def test_student_can_submit_single_weekly_booking(self, mock_init):
+    def test_student_can_submit_single_weekly_booking(self, mock_init, mock_plan):
         self.client.force_login(self.student_user)
         response = self.client.post(
             reverse("scheduling:book_coach", args=[self.coach.id]),
@@ -382,9 +392,11 @@ class BookingFlowTests(TestCase):
         self.assertEqual(len(booking.recurring_dates), 4)
         self.assertEqual(booking.payment_status, "pending")
         self.assertTrue(booking.payment_reference.startswith("BK-"))
+        self.assertEqual(booking.flutterwave_payment_plan_id, "3807")
 
+    @patch("scheduling.views.create_payment_plan", side_effect=_mock_create_payment_plan)
     @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
-    def test_student_can_submit_double_weekly_booking(self, mock_init):
+    def test_student_can_submit_double_weekly_booking(self, mock_init, mock_plan):
         self.client.force_login(self.student_user)
         response = self.client.post(
             reverse("scheduling:book_coach", args=[self.coach.id]),
@@ -407,6 +419,7 @@ class BookingFlowTests(TestCase):
         self.assertEqual(booking.booking_mode, "double")
         self.assertEqual(booking.sessions_per_month, 8)
         self.assertEqual(booking.monthly_amount, 76000)  # 5% discount
+        self.assertEqual(booking.flutterwave_payment_plan_id, "3807")
         self.assertEqual(sorted(booking.recurring_days), [1, 3])
         self.assertEqual(len(booking.recurring_dates), 8)
 
@@ -544,8 +557,9 @@ class BookingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Fully Booked")
 
+    @patch("scheduling.views.create_payment_plan", side_effect=_mock_create_payment_plan)
     @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
-    def test_recurring_booking_sends_creation_emails(self, mock_init):
+    def test_recurring_booking_sends_creation_emails(self, mock_init, mock_plan):
         self.client.force_login(self.student_user)
         self.coach.email = "coach@example.com"
         self.coach.save()
@@ -643,6 +657,45 @@ class BookingPaymentTests(TestCase):
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, "pending")
         self.assertEqual(self.booking.payment_status, "pending")
+
+
+class SubscriptionCancellationTests(TestCase):
+    def setUp(self):
+        self.student_user = User.objects.create_user(
+            email="cancelsub@example.com",
+            username="cancelsub",
+            password="testpass123",
+        )
+        self.coach = Coach.objects.create(name="Sub Coach", email="subcoach@example.com")
+        self.booking = Booking.objects.create(
+            coach=self.coach,
+            student_name="Cancel Student",
+            student_email="cancelsub@example.com",
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            flutterwave_payment_plan_id="3807",
+            flutterwave_subscription_id="sub_123",
+            payment_status="paid",
+            status="confirmed",
+            subscription_status="active",
+        )
+
+    @patch("scheduling.views.cancel_subscription")
+    def test_student_can_cancel_subscription(self, mock_cancel):
+        mock_cancel.return_value = {"success": True, "message": "Cancelled"}
+        self.client.force_login(self.student_user)
+        response = self.client.post(
+            reverse("scheduling:cancel_subscription", args=[self.booking.id]),
+        )
+        self.assertEqual(response.status_code, 302)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.subscription_status, "cancelled")
+        self.assertEqual(self.booking.status, "cancelled")
 
 
 class CoachBookingManagementTests(TestCase):

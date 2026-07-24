@@ -13,10 +13,18 @@ from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking
 from .forms import BookingForm, CoachProfileForm, AvailabilitySlotForm, CoachBlockedDateForm, PointsBookingForm, SpecialBookingForm
 from .emails import (
     send_recurring_booking_created,
+    send_recurring_booking_confirmed,
+    send_recurring_booking_cancelled,
     send_flexible_booking_created,
     send_special_booking_created,
 )
-from payments.flutterwave_service import generate_reference, initialize_transaction
+from payments.flutterwave_service import (
+    generate_reference,
+    initialize_transaction,
+    create_payment_plan,
+    cancel_subscription,
+    cancel_payment_plan,
+)
 
 
 DAY_ORDER = [
@@ -282,37 +290,62 @@ def book_coach_view(request, coach_id):
             if recurring_form.is_valid():
                 booking = recurring_form.save(coach=coach)
 
-                # Initialize Flutterwave payment for the recurring booking
-                payment_reference = generate_reference(prefix="BK")
-                amount = int(booking.monthly_amount)
-                redirect_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+                # Create a Flutterwave payment plan for the recurring subscription
+                plan_result = create_payment_plan(
+                    amount=int(booking.monthly_amount),
+                    name=f"Recurring booking {booking.id} — {booking.coach.name}",
+                    interval="monthly",
+                )
 
-                booking.payment_reference = payment_reference
+                if not plan_result["success"]:
+                    messages.error(
+                        request,
+                        f"Booking saved, but we could not create a payment plan: {plan_result['message']}. Please retry from your dashboard."
+                    )
+                    return render(request, "scheduling/booking_payment.html", {
+                        "booking": booking,
+                        "flutterwave_error": plan_result["message"],
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
+                    })
+
+                booking.flutterwave_payment_plan_id = str(plan_result["plan_id"])
+                booking.payment_reference = generate_reference(prefix="BK")
                 booking.payment_amount = booking.monthly_amount
                 booking.payment_status = "pending"
-                booking.save(update_fields=["payment_reference", "payment_amount", "payment_status"])
+                booking.save(
+                    update_fields=[
+                        "flutterwave_payment_plan_id",
+                        "payment_reference",
+                        "payment_amount",
+                        "payment_status",
+                    ]
+                )
 
+                redirect_url = request.build_absolute_uri(reverse("payments:booking_callback"))
                 send_recurring_booking_created(booking)
 
                 result = initialize_transaction(
                     email=booking.student_email,
-                    amount=amount,
-                    reference=payment_reference,
+                    amount=int(booking.monthly_amount),
+                    reference=booking.payment_reference,
                     redirect_url=redirect_url,
+                    payment_plan=plan_result["plan_id"],
                     metadata={
                         "booking_id": str(booking.id),
-                        "type": "recurring_booking",
+                        "type": "recurring_booking_subscription",
                         "coach_id": str(coach.id),
                         "amount": str(booking.monthly_amount),
+                        "payment_plan_id": str(plan_result["plan_id"]),
                     },
                 )
 
                 if result["success"]:
                     return render(request, "scheduling/booking_payment.html", {
                         "booking": booking,
-                        "payment_reference": payment_reference,
+                        "payment_reference": booking.payment_reference,
                         "authorization_url": result["authorization_url"],
                         "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
+                        "is_subscription": True,
                     })
                 else:
                     messages.error(
@@ -321,7 +354,7 @@ def book_coach_view(request, coach_id):
                     )
                     return render(request, "scheduling/booking_payment.html", {
                         "booking": booking,
-                        "payment_reference": payment_reference,
+                        "payment_reference": booking.payment_reference,
                         "flutterwave_error": result["message"],
                         "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
@@ -520,9 +553,10 @@ def retry_booking_payment_view(request, booking_id):
         amount=int(booking.monthly_amount),
         reference=booking.payment_reference,
         redirect_url=redirect_url,
+        payment_plan=booking.flutterwave_payment_plan_id or None,
         metadata={
             "booking_id": str(booking.id),
-            "type": "recurring_booking",
+            "type": "recurring_booking_subscription" if booking.flutterwave_payment_plan_id else "recurring_booking",
             "coach_id": str(booking.coach.id),
             "amount": str(booking.monthly_amount),
         },
@@ -534,6 +568,7 @@ def retry_booking_payment_view(request, booking_id):
             "payment_reference": booking.payment_reference,
             "authorization_url": result["authorization_url"],
             "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
+            "is_subscription": bool(booking.flutterwave_payment_plan_id),
         })
     else:
         messages.error(request, f"Could not start payment: {result['message']}")
@@ -583,6 +618,46 @@ def retry_special_payment_view(request, booking_id):
     else:
         messages.error(request, f"Could not start payment: {result['message']}")
         return redirect("accounts:dashboard")
+
+
+@login_required
+def cancel_subscription_view(request, booking_id):
+    """Allow a student or superuser to cancel a recurring booking subscription."""
+    from .models import Booking
+
+    booking = get_object_or_404(
+        Booking,
+        id=booking_id,
+        flutterwave_payment_plan_id__isnull=False,
+    )
+
+    if not (request.user.is_superuser or booking.student_email == request.user.email):
+        raise PermissionDenied
+
+    if booking.subscription_status == "cancelled":
+        messages.info(request, "This subscription is already cancelled.")
+        return redirect("accounts:dashboard")
+
+    # Prefer cancelling the individual subscription if it exists.
+    # Otherwise cancel the whole payment plan (one plan per booking).
+    if booking.flutterwave_subscription_id:
+        result = cancel_subscription(booking.flutterwave_subscription_id)
+    else:
+        result = cancel_payment_plan(booking.flutterwave_payment_plan_id)
+
+    if result["success"]:
+        booking.subscription_status = "cancelled"
+        booking.status = "cancelled"
+        booking.save(update_fields=["subscription_status", "status"])
+        send_recurring_booking_cancelled(booking)
+        messages.success(request, "Your subscription has been cancelled.")
+    else:
+        messages.error(
+            request,
+            f"Could not cancel subscription automatically: {result['message']}. Please contact support."
+        )
+
+    return redirect("accounts:dashboard")
 
 
 @login_required

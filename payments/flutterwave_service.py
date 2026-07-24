@@ -19,7 +19,14 @@ def _get_headers():
     }
 
 
-def initialize_transaction(email, amount, reference, redirect_url=None, metadata=None):
+def initialize_transaction(
+    email,
+    amount,
+    reference,
+    redirect_url=None,
+    metadata=None,
+    payment_plan=None,
+):
     """
     Initialize a Flutterwave transaction.
 
@@ -29,6 +36,7 @@ def initialize_transaction(email, amount, reference, redirect_url=None, metadata
         reference: unique transaction reference (tx_ref)
         redirect_url: optional URL for Flutterwave to redirect to after payment
         metadata: optional dict attached to the transaction
+        payment_plan: optional Flutterwave payment plan ID for subscriptions
 
     Returns:
         dict with success (bool), authorization_url, reference, message
@@ -47,6 +55,8 @@ def initialize_transaction(email, amount, reference, redirect_url=None, metadata
         },
         "meta": metadata or {},
     }
+    if payment_plan is not None:
+        payload["payment_plan"] = payment_plan
 
     try:
         response = requests.post(url, headers=_get_headers(), json=payload, timeout=30)
@@ -150,6 +160,127 @@ def verify_transaction(reference):
 def generate_reference(prefix="FLT"):
     """Generate a unique payment reference."""
     return f"{prefix}-{int(time.time())}-{secrets.token_hex(4)}"
+
+
+def _parse_response(response):
+    """Return JSON body or a dict with an error message."""
+    try:
+        return response.json()
+    except ValueError:
+        return {"message": "Invalid response from Flutterwave"}
+
+
+def create_payment_plan(amount, name, interval="monthly", currency="NGN", duration=None):
+    """
+    Create a Flutterwave payment plan for subscriptions.
+
+    Args:
+        amount: amount to charge per interval
+        name: plan name
+        interval: billing interval (hourly, daily, weekly, monthly, etc.)
+        currency: currency code
+        duration: number of intervals to charge; None means indefinite
+
+    Returns:
+        dict with success (bool), plan_id, data, message
+    """
+    url = f"{FLUTTERWAVE_BASE_URL}/payment-plans"
+    payload = {
+        "amount": amount,
+        "name": name,
+        "interval": interval,
+        "currency": currency,
+    }
+    if duration is not None:
+        payload["duration"] = duration
+
+    try:
+        response = requests.post(url, headers=_get_headers(), json=payload, timeout=30)
+        response.raise_for_status()
+        data = _parse_response(response)
+
+        if data.get("status") == "success" and data.get("data"):
+            plan_data = data["data"]
+            return {
+                "success": True,
+                "plan_id": plan_data.get("id"),
+                "data": plan_data,
+                "message": data.get("message", "Payment plan created"),
+            }
+        return {
+            "success": False,
+            "message": data.get("message", "Failed to create payment plan"),
+        }
+    except RuntimeError as e:
+        return {"success": False, "message": str(e)}
+    except requests.HTTPError as e:
+        data = _parse_response(response)
+        return {
+            "success": False,
+            "message": f"Flutterwave error: {data.get('message', str(e))}",
+        }
+    except requests.RequestException as e:
+        return {"success": False, "message": f"Flutterwave request failed: {e}"}
+
+
+def cancel_payment_plan(plan_id):
+    """Cancel a Flutterwave payment plan and all its subscriptions."""
+    url = f"{FLUTTERWAVE_BASE_URL}/payment-plans/{plan_id}/cancel"
+
+    try:
+        response = requests.post(url, headers=_get_headers(), timeout=30)
+        response.raise_for_status()
+        data = _parse_response(response)
+
+        if data.get("status") == "success":
+            return {
+                "success": True,
+                "message": data.get("message", "Payment plan cancelled"),
+            }
+        return {
+            "success": False,
+            "message": data.get("message", "Failed to cancel payment plan"),
+        }
+    except RuntimeError as e:
+        return {"success": False, "message": str(e)}
+    except requests.HTTPError as e:
+        data = _parse_response(response)
+        return {
+            "success": False,
+            "message": f"Flutterwave error: {data.get('message', str(e))}",
+        }
+    except requests.RequestException as e:
+        return {"success": False, "message": f"Flutterwave request failed: {e}"}
+
+
+def cancel_subscription(subscription_id):
+    """Cancel a single customer subscription."""
+    url = f"{FLUTTERWAVE_BASE_URL}/subscriptions/{subscription_id}/cancel"
+
+    try:
+        response = requests.post(url, headers=_get_headers(), timeout=30)
+        response.raise_for_status()
+        data = _parse_response(response)
+
+        if data.get("status") == "success":
+            return {
+                "success": True,
+                "message": data.get("message", "Subscription cancelled"),
+            }
+        return {
+            "success": False,
+            "message": data.get("message", "Failed to cancel subscription"),
+        }
+    except RuntimeError as e:
+        return {"success": False, "message": str(e)}
+    except requests.HTTPError as e:
+        data = _parse_response(response)
+        return {
+            "success": False,
+            "message": f"Flutterwave error: {data.get('message', str(e))}",
+        }
+    except requests.RequestException as e:
+        return {"success": False, "message": f"Flutterwave request failed: {e}"}
 
 
 def verify_webhook_signature(request_body, signature):

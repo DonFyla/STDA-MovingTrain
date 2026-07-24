@@ -50,10 +50,41 @@ class BookingAdmin(admin.ModelAdmin):
         "booking_date",
         "status",
         "payment_status",
+        "subscription_status",
+        "next_billing_date",
         "created_at",
     ]
-    list_filter = ["status", "payment_status", "course_type", "coach"]
+    list_filter = ["status", "payment_status", "subscription_status", "course_type", "coach"]
     search_fields = ["student_name", "student_email"]
+    readonly_fields = ["flutterwave_payment_plan_id", "flutterwave_subscription_id"]
+    actions = ["cancel_selected_subscriptions"]
+
+    @admin.action(description="Cancel selected active subscriptions on Flutterwave")
+    def cancel_selected_subscriptions(self, request, queryset):
+        from payments.flutterwave_service import cancel_subscription, cancel_payment_plan
+
+        cancelled = 0
+        for booking in queryset.filter(subscription_status="active"):
+            if booking.flutterwave_subscription_id:
+                result = cancel_subscription(booking.flutterwave_subscription_id)
+            elif booking.flutterwave_payment_plan_id:
+                result = cancel_payment_plan(booking.flutterwave_payment_plan_id)
+            else:
+                continue
+
+            if result["success"]:
+                booking.subscription_status = "cancelled"
+                booking.status = "cancelled"
+                booking.save(update_fields=["subscription_status", "status"])
+                cancelled += 1
+            else:
+                self.message_user(
+                    request,
+                    f"Failed to cancel subscription for {booking}: {result['message']}",
+                    level="error",
+                )
+
+        self.message_user(request, f"Cancelled {cancelled} subscription(s).")
 
 
 @admin.register(FlexibleBooking)
