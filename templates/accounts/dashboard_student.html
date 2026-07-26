@@ -5,7 +5,13 @@
 {% block title %}Dashboard - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
+<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14"
+         data-guide-page="dashboard"
+         data-user-balance="{{ user_balance }}"
+         data-upcoming-count="{{ upcoming_sessions|length }}"
+         data-tutors-url="{% url 'tutors' %}"
+         data-buy-points-url="{% url 'payments:buy_points' %}"
+         data-quiz-url="{% url 'quiz:register' %}">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -16,6 +22,54 @@
             <a href="{% url 'tutors' %}" class="btn-primary inline-flex items-center justify-center self-start">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                 Book a Session
+            </a>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" data-guide-quick-actions>
+            <a href="{% url 'tutors' %}" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center group-hover:bg-brand-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Book a class</p>
+                        <p class="text-xs text-brand-500">Single or monthly</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'payments:buy_points' %}" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Buy points</p>
+                        <p class="text-xs text-brand-500">Top up your balance</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'quiz:register' %}" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Take quiz</p>
+                        <p class="text-xs text-brand-500">Find your level</p>
+                    </div>
+                </div>
+            </a>
+            <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.42c1.45.79 3.08 1.21 4.76 1.21h.03c5.46 0 9.91-4.45 9.91-9.91S17.51 2 12.04 2zm5.54 14.23c-.24.67-1.35 1.27-1.89 1.35-.5.07-1.02.1-1.54-.03-.36-.09-.81-.23-1.38-.45-2.42-1.01-4-3.53-4.12-3.69-.12-.16-.99-1.31-.99-2.5 0-1.19.62-1.77.85-2.01.23-.24.52-.3.69-.3h.5c.16 0 .37-.06.57.43.21.52.74 1.8.81 1.93.07.13.12.28.02.45-.1.17-.15.27-.3.42-.15.15-.31.31-.44.42-.14.12-.28.25-.12.49.16.24.74 1.22 1.58 1.97 1.09.97 2.01 1.28 2.3 1.42.29.14.46.12.63-.07.17-.19.72-.84.91-1.13.19-.29.38-.24.63-.14.26.1 1.65.78 1.94.92.29.14.48.21.55.33.07.12.07.67-.17 1.34z"/></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Get help</p>
+                        <p class="text-xs text-brand-500">Chat on WhatsApp</p>
+                    </div>
+                </div>
             </a>
         </div>
 
@@ -68,7 +122,7 @@
         </div>
 
         <!-- Upcoming Sessions (combined) -->
-        <div class="mb-8">
+        <div class="mb-8" id="upcoming-sessions">
             <h2 class="text-xl font-bold text-brand-900 mb-4">Upcoming Sessions</h2>
             {% if upcoming_sessions %}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

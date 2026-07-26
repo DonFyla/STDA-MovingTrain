@@ -35,4 +35,5 @@ def seo(request):
         "GOOGLE_ADS_CONVERSION_ID": getattr(settings, "GOOGLE_ADS_CONVERSION_ID", ""),
         "GOOGLE_ADS_CONVERSION_LABEL": getattr(settings, "GOOGLE_ADS_CONVERSION_LABEL", ""),
         "CANONICAL_URL": canonical_url,
+        "GUIDE_ENABLED": getattr(settings, "GUIDE_ENABLED", True),
     }

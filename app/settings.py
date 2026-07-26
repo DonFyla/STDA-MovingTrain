@@ -194,6 +194,9 @@ SITE_DEFAULT_IMAGE = config(
     "SITE_DEFAULT_IMAGE", default="static/images/others/logo.svg"
 )
 
+# In-page booking guide widget
+GUIDE_ENABLED = config("GUIDE_ENABLED", default=True, cast=bool)
+
 # Security headers (enable in production)
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)

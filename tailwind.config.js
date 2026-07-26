@@ -3,6 +3,7 @@ module.exports = {
   content: [
     "./templates/**/*.html",
     "./**/templates/**/*.html",
+    "./static/js/booking-guide.js",
   ],
   safelist: [
     "from-purple-500",
