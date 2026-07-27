@@ -1,5 +1,5 @@
 {% load humanize %}
-<div class="card p-6 md:p-8 hover:shadow-xl transition-shadow flex flex-col {% if coach.is_special %}border-2 border-amber-200 bg-gradient-to-b from-amber-50/50 to-white{% endif %}">
+<div data-tour="coach-card" data-tour-coach-url="{% url 'scheduling:book_coach' coach.id %}" class="card p-6 md:p-8 hover:shadow-xl transition-shadow flex flex-col {% if coach.is_special %}border-2 border-amber-200 bg-gradient-to-b from-amber-50/50 to-white{% endif %}">
     <div class="relative mb-6">
         {% if coach.photo %}
             <img src="{{ coach.photo.url }}" alt="{{ coach.name }}" class="w-full h-72 object-cover rounded-xl">

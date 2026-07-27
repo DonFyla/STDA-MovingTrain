@@ -56,7 +56,7 @@
             </div>
 
             <!-- Tabs -->
-            <div class="mb-8">
+            <div class="mb-8" data-tour="booking-tabs">
                 <div class="inline-flex p-1 bg-white rounded-xl border border-brand-200 shadow-sm">
                     <button type="button" onclick="switchTab('points')" id="tab-points" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white">
                         <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -96,7 +96,7 @@
                                 Cost: <span id="selected-cost" class="font-bold text-brand-900">0</span> points
                             </div>
                         </div>
-                        <div id="calendar-container" class="space-y-6"></div>
+                        <div id="calendar-container" data-tour="time-selection" class="space-y-6"></div>
                     </div>
 
                     <!-- Selected Slots Summary -->
@@ -106,7 +106,7 @@
                     </div>
 
                     <!-- Student Info -->
-                    <div class="card p-6 md:p-8">
+                    <div class="card p-6 md:p-8" data-tour="student-info">
                         <h2 class="text-xl font-bold text-brand-900 mb-5">Your Information</h2>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
@@ -136,7 +136,7 @@
                         </div>
 
                         <div class="mt-6">
-                            <button type="submit" id="points-submit-btn" class="w-full sm:w-auto px-8 py-4 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            <button type="submit" id="points-submit-btn" data-tour="payment-button" class="w-full sm:w-auto px-8 py-4 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                                 Complete Points Booking
                             </button>
                             <a href="{% url 'payments:buy_points' %}" id="buy-points-link" class="hidden ml-4 px-8 py-4 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors inline-flex items-center">

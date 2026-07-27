@@ -1,18 +1,97 @@
 /**
- * Lightweight, task-based booking guide.
+ * Lightweight booking guide + onboarding tour.
  *
  * Renders a floating "Need help?" widget on pages that opt-in with
- * [data-guide-page]. Suggestions are rule-based and context-aware (balance,
- * upcoming sessions, coach type, etc.). No external dependencies.
+ * [data-guide-page], and can run a step-by-step tour across the dashboard,
+ * tutors list, and booking pages.
  */
 (function () {
   const GUIDE_HIDDEN_KEY = "mt-guide-hidden";
+  const TOUR_SEEN_KEY = "mt-tour-seen";
+  const TOUR_ACTIVE_KEY = "mt-tour-active";
+  const TOUR_STEP_KEY = "mt-tour-step";
+
   const HIGHLIGHT_CLASSES = [
     "ring-4",
     "ring-brand-400",
     "ring-offset-2",
     "transition-all",
     "duration-500",
+  ];
+
+  const TOUR_STEPS = [
+    {
+      page: "dashboard",
+      selector: null,
+      title: "Welcome to your dashboard",
+      text: "This is your home base. You can see your points, book classes, and manage subscriptions.",
+    },
+    {
+      page: "dashboard",
+      selector: '[data-tour="points-balance"]',
+      title: "Points Balance",
+      text: "Your points let you book flexible single classes. Buy more anytime.",
+    },
+    {
+      page: "dashboard",
+      selector: '[data-tour="quick-actions"]',
+      title: "Quick Actions",
+      text: "Jump straight to booking, buying points, taking the quiz, or getting help.",
+    },
+    {
+      page: "dashboard",
+      selector: "#upcoming-sessions",
+      title: "Upcoming Sessions",
+      text: "All your confirmed classes show here with join links.",
+    },
+    {
+      page: "dashboard",
+      selector: '[data-tour="monthly-bookings"]',
+      title: "Monthly Bookings",
+      text: "Your recurring subscriptions appear here. You can pay or cancel.",
+    },
+    {
+      page: "tutors",
+      selector: '[data-tour="tutors-tabs"]',
+      title: "Regular vs Elite Coaches",
+      text: "Regular coaches work with points or monthly plans. Elite coaches are pay-per-session for advanced training.",
+    },
+    {
+      page: "tutors",
+      selector: '[data-tour="coach-card"]',
+      title: "Coach Card",
+      text: "Each card shows the coach's details. Click Book a Session to continue.",
+    },
+    {
+      page: "book_coach",
+      selector: "#booking-stepper",
+      title: "Follow the Steps",
+      text: "The stepper shows where you are: choose type, pick date/time, fill info, and complete.",
+    },
+    {
+      page: "book_coach",
+      selector: '[data-tour="booking-tabs"]',
+      title: "Choose Booking Type",
+      text: "Pay with points, subscribe monthly, or book an elite package.",
+    },
+    {
+      page: "book_coach",
+      selector: '[data-tour="time-selection"]',
+      title: "Pick a Time",
+      text: "Select the day and time that works for you.",
+    },
+    {
+      page: "book_coach",
+      selector: '[data-tour="student-info"]',
+      title: "Your Information",
+      text: "Fill in your details so the coach knows who to expect.",
+    },
+    {
+      page: "book_coach",
+      selector: '[data-tour="payment-button"]',
+      title: "Complete Booking",
+      text: "Review and submit. For paid options, you'll check out securely with Flutterwave.",
+    },
   ];
 
   const body = document.body;
@@ -28,6 +107,7 @@
   document.body.appendChild(root);
 
   let open = false;
+  let currentTourTarget = null;
 
   function buildUI() {
     root.innerHTML = `
@@ -74,6 +154,14 @@
   function getActions() {
     const actions = [];
     const isAuthenticated = body.dataset.userAuthenticated === "true";
+
+    if (isAuthenticated) {
+      actions.push({
+        label: "Take a tour",
+        desc: "Walk through the dashboard and booking flow.",
+        handler: () => startTour(0, true),
+      });
+    }
 
     if (page === "dashboard") {
       const balance = parseFloat(pageEl.dataset.userBalance || "0") || 0;
@@ -277,5 +365,219 @@
     });
   };
 
+  // ================= TOUR =================
+
+  function initTour() {
+    if (sessionStorage.getItem(TOUR_ACTIVE_KEY) === "true") {
+      const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);
+      setTimeout(() => runStep(stepIndex), 600);
+      return;
+    }
+    if (shouldAutoStartTour()) {
+      setTimeout(() => startTour(0, false), 1500);
+    }
+  }
+
+  function shouldAutoStartTour() {
+    return (
+      body.dataset.userAuthenticated === "true" &&
+      page === "dashboard" &&
+      !localStorage.getItem(TOUR_SEEN_KEY)
+    );
+  }
+
+  function startTour(stepIndex, navigateToDashboard) {
+    endTour(false);
+    sessionStorage.setItem(TOUR_ACTIVE_KEY, "true");
+    sessionStorage.setItem(TOUR_STEP_KEY, String(stepIndex));
+    if (navigateToDashboard && page !== "dashboard") {
+      window.location.href = body.dataset.dashboardUrl || "/accounts/dashboard/";
+      return;
+    }
+    setOpen(false);
+    setTimeout(() => runStep(stepIndex), 400);
+  }
+
+  function runStep(index) {
+    if (index < 0 || index >= TOUR_STEPS.length) {
+      endTour(true);
+      return;
+    }
+    sessionStorage.setItem(TOUR_STEP_KEY, String(index));
+    const step = TOUR_STEPS[index];
+    if (step.page && step.page !== page) {
+      const url = getStepUrl(step.page);
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      // No direct URL for this step; skip it.
+      runStep(index + 1);
+      return;
+    }
+    showTourStep(step, index);
+  }
+
+  function getStepUrl(targetPage) {
+    if (targetPage === "dashboard") {
+      return body.dataset.dashboardUrl || "/accounts/dashboard/";
+    }
+    if (targetPage === "tutors") {
+      return pageEl && pageEl.dataset.tourTutorsUrl
+        ? pageEl.dataset.tourTutorsUrl
+        : "/tutors/";
+    }
+    if (targetPage === "book_coach") {
+      const firstCard = document.querySelector("[data-tour-coach-url]");
+      return firstCard ? firstCard.dataset.tourCoachUrl : null;
+    }
+    return null;
+  }
+
+  function showTourStep(step, index) {
+    clearTourUI();
+    createTourBackdrop();
+    const target = step.selector ? document.querySelector(step.selector) : null;
+    currentTourTarget = target;
+    if (target) {
+      target.classList.add(...HIGHLIGHT_CLASSES);
+      target.style.position = "relative";
+      target.style.zIndex = "60";
+      target.setAttribute("tabindex", "-1");
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    const tooltip = createTourTooltip(step, index);
+    positionTourTooltip(tooltip, target, step.position);
+  }
+
+  function createTourBackdrop() {
+    let backdrop = document.getElementById("tour-backdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "tour-backdrop";
+      backdrop.className =
+        "fixed inset-0 bg-black/60 z-40 transition-opacity duration-200 opacity-0";
+      backdrop.setAttribute("aria-hidden", "true");
+      backdrop.addEventListener("click", () => endTour(false));
+      document.body.appendChild(backdrop);
+    }
+    requestAnimationFrame(() => backdrop.classList.remove("opacity-0"));
+  }
+
+  function createTourTooltip(step, index) {
+    let tooltip = document.getElementById("tour-tooltip");
+    if (!tooltip) {
+      tooltip = document.createElement("div");
+      tooltip.id = "tour-tooltip";
+      tooltip.className =
+        "fixed z-[60] w-[calc(100vw-2rem)] md:w-80 bg-white rounded-2xl shadow-2xl border border-brand-100 p-5 transition-all duration-200 opacity-0 scale-95";
+      tooltip.setAttribute("role", "dialog");
+      tooltip.setAttribute("aria-live", "polite");
+      document.body.appendChild(tooltip);
+    }
+    const isFirst = index === 0;
+    const isLast = index === TOUR_STEPS.length - 1;
+    tooltip.innerHTML = `
+      <div class="flex items-start justify-between mb-3">
+        <h4 class="font-bold text-brand-900">${step.title}</h4>
+        <span class="text-xs text-brand-400 font-medium">${index + 1}/${TOUR_STEPS.length}</span>
+      </div>
+      <p class="text-sm text-brand-700 mb-5 leading-relaxed">${step.text}</p>
+      <div class="flex items-center justify-between">
+        <button type="button" id="tour-skip" class="text-sm text-brand-500 hover:text-brand-700 font-medium">Skip tour</button>
+        <div class="flex items-center gap-2">
+          ${!isFirst ? `<button type="button" id="tour-prev" class="px-3 py-2 text-sm font-medium text-brand-700 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors">Back</button>` : ""}
+          <button type="button" id="tour-next" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors">${isLast ? "Finish" : "Next"}</button>
+        </div>
+      </div>
+    `;
+    tooltip.querySelector("#tour-skip").addEventListener("click", () => endTour(false));
+    const nextBtn = tooltip.querySelector("#tour-next");
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        if (isLast) endTour(true);
+        else runStep(index + 1);
+      });
+    }
+    if (!isFirst) {
+      tooltip.querySelector("#tour-prev").addEventListener("click", () => runStep(index - 1));
+    }
+    requestAnimationFrame(() => tooltip.classList.remove("opacity-0", "scale-95"));
+    return tooltip;
+  }
+
+  function positionTourTooltip(tooltip, target, preferred) {
+    const margin = 12;
+    const rect = target ? target.getBoundingClientRect() : null;
+    const ttRect = tooltip.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let top, left;
+
+    if (!rect) {
+      top = (vh - ttRect.height) / 2;
+      left = (vw - ttRect.width) / 2;
+    } else {
+      const placeBottom =
+        preferred === "bottom" || (rect.top > vh / 2 && preferred !== "top");
+      if (placeBottom) {
+        top = rect.bottom + margin;
+      } else {
+        top = rect.top - ttRect.height - margin;
+      }
+      left = rect.left + rect.width / 2 - ttRect.width / 2;
+    }
+
+    left = Math.max(margin, Math.min(left, vw - ttRect.width - margin));
+    top = Math.max(margin, Math.min(top, vh - ttRect.height - margin));
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+  }
+
+  function clearTourUI() {
+    if (currentTourTarget) {
+      currentTourTarget.classList.remove(...HIGHLIGHT_CLASSES);
+      currentTourTarget.style.position = "";
+      currentTourTarget.style.zIndex = "";
+      currentTourTarget.removeAttribute("tabindex");
+      currentTourTarget = null;
+    }
+  }
+
+  function endTour(completed) {
+    clearTourUI();
+    const backdrop = document.getElementById("tour-backdrop");
+    if (backdrop) {
+      backdrop.classList.add("opacity-0");
+      setTimeout(() => backdrop.remove(), 200);
+    }
+    const tooltip = document.getElementById("tour-tooltip");
+    if (tooltip) {
+      tooltip.classList.add("opacity-0", "scale-95");
+      setTimeout(() => tooltip.remove(), 200);
+    }
+    sessionStorage.removeItem(TOUR_ACTIVE_KEY);
+    sessionStorage.removeItem(TOUR_STEP_KEY);
+    if (completed) {
+      localStorage.setItem(TOUR_SEEN_KEY, "true");
+    }
+  }
+
+  function handleTourKey(e) {
+    if (sessionStorage.getItem(TOUR_ACTIVE_KEY) !== "true") return;
+    if (e.key === "Escape") {
+      endTour(false);
+    } else if (e.key === "ArrowRight") {
+      const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);
+      if (stepIndex < TOUR_STEPS.length - 1) runStep(stepIndex + 1);
+      else endTour(true);
+    } else if (e.key === "ArrowLeft") {
+      const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);
+      if (stepIndex > 0) runStep(stepIndex - 1);
+    }
+  }
+  document.addEventListener("keydown", handleTourKey);
+
   buildUI();
+  initTour();
 })();
