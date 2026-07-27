@@ -103,11 +103,16 @@ class SpecialCoachesSplitViewTests(TestCase):
             featured_order=4,
         )
 
-    def test_tutors_page_defaults_to_elite_tab(self):
+    def test_tutors_page_defaults_to_regular_tab(self):
         response = self.client.get(reverse("tutors"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Elite / Special Coaches")
-        self.assertContains(response, "Elite Coaching Program")
+        self.assertContains(response, "Regular Coaches")
+        self.assertContains(response, '<div id="panel-normal" class="tab-panel">')
+        self.assertContains(response, '<div id="panel-special" class="tab-panel hidden">')
+        self.assertContains(
+            response,
+            'id="tab-normal" class="tab-btn px-6 py-2.5 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white"',
+        )
 
     def test_tutors_page_shows_rank_badges(self):
         response = self.client.get(reverse("tutors"))
