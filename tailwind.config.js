@@ -18,6 +18,8 @@ module.exports = {
     "to-violet-700",
     "from-pink-500",
     "to-pink-700",
+    "from-amber-500",
+    "to-amber-700",
     "bg-purple-100",
     "text-purple-700",
     "bg-blue-100",

@@ -43,7 +43,7 @@
                     <h1 class="section-title mb-6">{{ course.title }}</h1>
                     <p class="text-lg text-brand-700 mb-8">{{ course.description }}</p>
                     <div class="flex flex-col sm:flex-row gap-4">
-                        <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="btn-primary">Book a Free Trial</a>
+                        <a href="{% url 'tutors' %}" class="btn-primary">Book a Class Now</a>
                         <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="btn-secondary">Chat on WhatsApp</a>
                     </div>
                 </div>
@@ -108,16 +108,26 @@
                 <p class="text-brand-700 mt-3">Our instructors are the best at what they do with years of teaching experience and champions produced.</p>
             </div>
             <div class="space-y-4">
-                {% for tutor in tutors %}
+                {% for instructor in instructors %}
                     <div class="flex items-center gap-4 p-4 bg-white rounded-2xl border border-brand-100 hover:shadow-md transition-shadow">
-                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-{{ tutor.color }}-500 to-{{ tutor.color }}-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                            {{ tutor.initials }}
-                        </div>
+                        {% if instructor.coach.photo %}
+                            <img src="{{ instructor.coach.photo.url }}" alt="{{ instructor.coach.name }}" class="w-14 h-14 rounded-full object-cover flex-shrink-0">
+                        {% elif instructor.coach.photo_url %}
+                            <img src="{{ instructor.coach.photo_url }}" alt="{{ instructor.coach.name }}" class="w-14 h-14 rounded-full object-cover flex-shrink-0">
+                        {% else %}
+                            <div class="w-14 h-14 rounded-full bg-gradient-to-br from-{{ instructor.color }}-500 to-{{ instructor.color }}-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                                {{ instructor.initials }}
+                            </div>
+                        {% endif %}
                         <div class="flex-grow min-w-0">
-                            <h3 class="font-semibold text-brand-900">{{ tutor.name }}</h3>
-                            <p class="text-sm text-brand-600 truncate">{{ tutor.role }}</p>
+                            <h3 class="font-semibold text-brand-900">{{ instructor.coach.name }}</h3>
+                            <p class="text-sm text-brand-600 truncate">{{ instructor.coach.specialization|default:"Coach" }}</p>
                         </div>
-                        <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-full hover:bg-brand-700 transition-colors flex-shrink-0">Book Coach</a>
+                        <a href="{% url 'scheduling:book_coach' instructor.coach.id %}" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-full hover:bg-brand-700 transition-colors flex-shrink-0">Book Coach</a>
+                    </div>
+                {% empty %}
+                    <div class="text-center py-8">
+                        <p class="text-brand-600">No instructors listed yet.</p>
                     </div>
                 {% endfor %}
             </div>
@@ -168,9 +178,9 @@
 <section class="py-20 lg:py-28 bg-brand-900 text-white">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h2 class="text-3xl md:text-5xl font-bold mb-6">Make Champions of Your Kids</h2>
-        <p class="text-brand-200 text-lg max-w-2xl mx-auto mb-10">Begin that chess journey now with a free trial session.</p>
-        <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center px-8 py-4 bg-white text-brand-900 font-semibold rounded-full hover:bg-brand-100 transition-colors">
-            Book a Free Trial Session
+        <p class="text-brand-200 text-lg max-w-2xl mx-auto mb-10">Begin that chess journey now with a class.</p>
+        <a href="{% url 'tutors' %}" class="inline-flex items-center justify-center px-8 py-4 bg-white text-brand-900 font-semibold rounded-full hover:bg-brand-100 transition-colors">
+            Book a Class Now
         </a>
     </div>
 </section>

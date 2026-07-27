@@ -32,7 +32,7 @@
                         Take a Quick Quiz
                         <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                     </a>
-                    <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="btn-secondary">
+                    <a href="{% url 'tutors' %}" class="btn-secondary">
                         Learn Now
                     </a>
                 </div>
@@ -92,7 +92,7 @@
             <img src="{% static 'images/others/kid2.svg' %}" alt="Student playing chess" class="w-32 md:w-48 rounded-2xl shadow-lg rotate-3">
         </div>
         <div class="text-center mt-12">
-            <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="btn-primary">Start Learning Today</a>
+            <a href="{% url 'tutors' %}" class="btn-primary">Start Learning Today</a>
         </div>
     </div>
 </section>
@@ -139,19 +139,38 @@
             <h2 class="section-title mt-3">Meet Our Team Leaders</h2>
         </div>
         <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {% for tutor in tutors %}
+            {% for coach in coaches %}
                 <div class="card p-6 text-center hover:shadow-xl transition-shadow">
-                    <img src="{% static tutor.image %}" alt="{{ tutor.name }}" class="w-full h-64 object-cover rounded-xl mb-6">
-                    <h3 class="text-xl font-bold text-brand-900 mb-4">{{ tutor.name }}</h3>
-                    <ul class="text-left text-sm text-brand-700 space-y-2 mb-6">
-                        {% for feat in tutor.feats %}
-                            <li class="flex items-start gap-2">
-                                <span class="w-1.5 h-1.5 bg-brand-500 rounded-full mt-1.5 flex-shrink-0"></span>
-                                <span>{{ feat }}</span>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                    <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="btn-primary w-full justify-center text-sm">Book a Session</a>
+                    {% if coach.photo %}
+                        <img src="{{ coach.photo.url }}" alt="{{ coach.name }}" class="w-full h-64 object-cover rounded-xl mb-6">
+                    {% elif coach.photo_url %}
+                        <img src="{{ coach.photo_url }}" alt="{{ coach.name }}" class="w-full h-64 object-cover rounded-xl mb-6">
+                    {% else %}
+                        <div class="w-full h-64 bg-brand-200 rounded-xl flex items-center justify-center mb-6">
+                            <svg class="w-24 h-24 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                        </div>
+                    {% endif %}
+                    <h3 class="text-xl font-bold text-brand-900 mb-2">{{ coach.name }}</h3>
+                    {% if coach.specialization %}
+                        <p class="text-sm text-brand-600 mb-4">{{ coach.specialization }}</p>
+                    {% endif %}
+                    {% if coach.achievements %}
+                        <ul class="text-left text-sm text-brand-700 space-y-2 mb-6">
+                            {% for feat in coach.achievements %}
+                                {% if feat %}
+                                    <li class="flex items-start gap-2">
+                                        <span class="w-1.5 h-1.5 bg-brand-500 rounded-full mt-1.5 flex-shrink-0"></span>
+                                        <span>{{ feat }}</span>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                    <a href="{% url 'scheduling:book_coach' coach.id %}" class="btn-primary w-full justify-center text-sm">Book a Session</a>
+                </div>
+            {% empty %}
+                <div class="col-span-2 text-center py-12">
+                    <p class="text-brand-600">No coaches listed yet.</p>
                 </div>
             {% endfor %}
         </div>
