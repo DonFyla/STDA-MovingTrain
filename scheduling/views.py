@@ -10,7 +10,15 @@ from django.urls import reverse
 from django.db import transaction
 from django.utils import timezone
 from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking
-from .forms import BookingForm, CoachProfileForm, AvailabilitySlotForm, CoachBlockedDateForm, PointsBookingForm, SpecialBookingForm
+from .forms import (
+    BookingForm,
+    CoachProfileForm,
+    AvailabilitySlotForm,
+    BulkAvailabilityForm,
+    CoachBlockedDateForm,
+    PointsBookingForm,
+    SpecialBookingForm,
+)
 from .emails import (
     send_recurring_booking_created,
     send_recurring_booking_confirmed,
@@ -36,6 +44,38 @@ DAY_ORDER = [
     "Friday",
     "Saturday",
 ]
+
+
+def _generate_availability_slots(coach, day_of_week, start_time, end_time, duration_minutes):
+    """Create consecutive availability slots for a coach within a time range."""
+    created = 0
+    skipped = 0
+    current = datetime.combine(date.min, start_time)
+    end = datetime.combine(date.min, end_time)
+    step = timedelta(minutes=duration_minutes)
+
+    while current + step <= end:
+        slot_start = current.time()
+        slot_end = (current + step).time()
+        exists = AvailabilitySlot.objects.filter(
+            coach=coach,
+            day_of_week=day_of_week,
+            start_time=slot_start,
+            end_time=slot_end,
+        ).exists()
+        if exists:
+            skipped += 1
+        else:
+            AvailabilitySlot.objects.create(
+                coach=coach,
+                day_of_week=day_of_week,
+                start_time=slot_start,
+                end_time=slot_end,
+            )
+            created += 1
+        current += step
+
+    return created, skipped
 
 
 def _parse_session_date(value):
@@ -104,14 +144,43 @@ def coach_dashboard_view(request):
             return redirect("scheduling:coach_dashboard")
 
         elif action == "add_availability":
-            form = AvailabilitySlotForm(request.POST)
+            form = BulkAvailabilityForm(request.POST)
             if form.is_valid():
-                slot = form.save(commit=False)
-                slot.coach = coach
-                slot.save()
-                messages.success(request, "Availability slot added.")
+                day = int(form.cleaned_data["day_of_week"])
+                start = form.cleaned_data["start_time"]
+                end = form.cleaned_data["end_time"]
+                duration = int(form.cleaned_data["slot_duration"])
+                split = form.cleaned_data["split_into_slots"]
+
+                if split:
+                    created, skipped = _generate_availability_slots(
+                        coach, day, start, end, duration
+                    )
+                    msg = f"Added {created} availability slot{'' if created == 1 else 's'}."
+                    if skipped:
+                        msg += (
+                            f" {skipped} duplicate slot{'' if skipped == 1 else 's'} skipped."
+                        )
+                    messages.success(request, msg)
+                else:
+                    exists = AvailabilitySlot.objects.filter(
+                        coach=coach,
+                        day_of_week=day,
+                        start_time=start,
+                        end_time=end,
+                    ).exists()
+                    if exists:
+                        messages.warning(request, "That exact availability slot already exists.")
+                    else:
+                        AvailabilitySlot.objects.create(
+                            coach=coach,
+                            day_of_week=day,
+                            start_time=start,
+                            end_time=end,
+                        )
+                        messages.success(request, "Availability slot added.")
             else:
-                messages.error(request, "Could not add availability slot.")
+                messages.error(request, "Could not add availability. Please correct the errors below.")
             return redirect("scheduling:coach_dashboard")
 
         elif action == "delete_availability":
@@ -159,7 +228,7 @@ def coach_dashboard_view(request):
             return redirect("scheduling:coach_dashboard")
 
     profile_form = CoachProfileForm(instance=coach)
-    availability_form = AvailabilitySlotForm()
+    availability_form = BulkAvailabilityForm()
     blocked_date_form = CoachBlockedDateForm()
 
     availability_slots = coach.availability_slots.order_by("day_of_week", "start_time")

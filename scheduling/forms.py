@@ -66,6 +66,46 @@ class AvailabilitySlotForm(forms.ModelForm):
         }
 
 
+class BulkAvailabilityForm(forms.Form):
+    SLOT_DURATION_CHOICES = [
+        (30, "30 minutes"),
+        (45, "45 minutes"),
+        (60, "1 hour"),
+        (90, "1 hour 30 minutes"),
+        (120, "2 hours"),
+    ]
+
+    day_of_week = forms.ChoiceField(
+        choices=AvailabilitySlot.DAY_CHOICES,
+        label="Day",
+    )
+    start_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={"type": "time"}),
+    )
+    end_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={"type": "time"}),
+    )
+    slot_duration = forms.ChoiceField(
+        choices=SLOT_DURATION_CHOICES,
+        initial=60,
+        label="Slot length",
+    )
+    split_into_slots = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Split range into multiple slots",
+        help_text="If checked, the range is split into consecutive slots of the chosen length.",
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        start = cleaned.get("start_time")
+        end = cleaned.get("end_time")
+        if start and end and end <= start:
+            raise forms.ValidationError("End time must be after start time.")
+        return cleaned
+
+
 class CoachBlockedDateForm(forms.ModelForm):
     is_full_day = forms.BooleanField(required=False, initial=True, label="Block entire day")
 

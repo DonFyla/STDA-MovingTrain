@@ -356,9 +356,19 @@
                                     <label for="{{ availability_form.end_time.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">End</label>
                                     {{ availability_form.end_time|add_class:"w-32 px-3 py-2.5 rounded-lg border border-brand-200 bg-white focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none" }}
                                 </div>
+                                <div>
+                                    <label for="{{ availability_form.slot_duration.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Slot length</label>
+                                    {{ availability_form.slot_duration|add_class:"w-40 px-3 py-2.5 rounded-lg border border-brand-200 bg-white focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none" }}
+                                </div>
+                                <div class="flex items-center gap-2 pb-3">
+                                    {{ availability_form.split_into_slots|add_class:"w-5 h-5 text-brand-600 rounded border-brand-300 focus:ring-brand-500" }}
+                                    <label for="{{ availability_form.split_into_slots.id_for_label }}" class="text-sm font-medium text-brand-700">
+                                        {{ availability_form.split_into_slots.label }}
+                                    </label>
+                                </div>
                                 <button type="submit" class="px-5 py-2.5 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-700 transition-colors flex items-center gap-2">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                                    Add Slot
+                                    Add Slot(s)
                                 </button>
                             </form>
 

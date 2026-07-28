@@ -138,7 +138,9 @@ class CoachDashboardTests(TestCase):
                 "action": "add_availability",
                 "day_of_week": 1,
                 "start_time": "10:00",
-                "end_time": "12:00",
+                "end_time": "11:00",
+                "slot_duration": 60,
+                "split_into_slots": False,
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -154,6 +156,84 @@ class CoachDashboardTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(AvailabilitySlot.objects.filter(coach=self.coach).count(), 0)
+
+    def test_coach_can_bulk_add_availability_slots(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("scheduling:coach_dashboard"),
+            {
+                "action": "add_availability",
+                "day_of_week": 1,
+                "start_time": "09:00",
+                "end_time": "12:00",
+                "slot_duration": 60,
+                "split_into_slots": True,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        slots = AvailabilitySlot.objects.filter(coach=self.coach).order_by("start_time")
+        self.assertEqual(slots.count(), 3)
+        self.assertEqual(slots[0].start_time, time(9, 0))
+        self.assertEqual(slots[0].end_time, time(10, 0))
+        self.assertEqual(slots[1].start_time, time(10, 0))
+        self.assertEqual(slots[2].start_time, time(11, 0))
+
+    def test_bulk_availability_skips_exact_duplicates(self):
+        AvailabilitySlot.objects.create(
+            coach=self.coach,
+            day_of_week=1,
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+        )
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("scheduling:coach_dashboard"),
+            {
+                "action": "add_availability",
+                "day_of_week": 1,
+                "start_time": "09:00",
+                "end_time": "12:00",
+                "slot_duration": 60,
+                "split_into_slots": True,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(AvailabilitySlot.objects.filter(coach=self.coach).count(), 3)
+
+    def test_bulk_availability_ignores_partial_range(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("scheduling:coach_dashboard"),
+            {
+                "action": "add_availability",
+                "day_of_week": 1,
+                "start_time": "09:00",
+                "end_time": "09:30",
+                "slot_duration": 60,
+                "split_into_slots": True,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(AvailabilitySlot.objects.filter(coach=self.coach).count(), 0)
+
+    def test_coach_can_add_single_unsplit_availability_slot(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("scheduling:coach_dashboard"),
+            {
+                "action": "add_availability",
+                "day_of_week": 2,
+                "start_time": "09:00",
+                "end_time": "14:00",
+                "slot_duration": 60,
+                "split_into_slots": False,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        slots = AvailabilitySlot.objects.filter(coach=self.coach)
+        self.assertEqual(slots.count(), 1)
+        self.assertEqual(slots.first().start_time, time(9, 0))
+        self.assertEqual(slots.first().end_time, time(14, 0))
 
     def test_coach_can_add_and_delete_blocked_date(self):
         self.client.force_login(self.coach_user)
