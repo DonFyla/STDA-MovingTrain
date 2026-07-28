@@ -7,9 +7,9 @@
 {% block title %}Coach Dashboard - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="min-h-screen bg-brand-50 pb-16">
+<section class="min-h-screen bg-brand-50 pb-16" data-guide-page="coach_dashboard">
     <!-- Header -->
-    <header class="bg-white border-b border-brand-100">
+    <header class="bg-white border-b border-brand-100" data-tour="coach-header">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -26,7 +26,7 @@
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Tabs -->
-        <div class="mb-8">
+        <div class="mb-8" data-tour="coach-tabs">
             <div class="inline-flex p-1 bg-white rounded-xl border border-brand-200 shadow-sm">
                 <button type="button" onclick="switchTab('schedule')" id="tab-schedule" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white">
                     <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -45,7 +45,7 @@
                 <!-- Left Column -->
                 <div class="space-y-8">
                     <!-- Meeting Link Card -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-meeting-link">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
@@ -70,7 +70,7 @@
                     </div>
 
                     <!-- Effective Availability Preview -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-availability-preview">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -111,7 +111,7 @@
                     </div>
 
                     <!-- Pending Bookings -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-pending-bookings">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -191,7 +191,7 @@
                     </div>
 
                     <!-- Upcoming Bookings -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-confirmed-bookings">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -333,7 +333,7 @@
                 <!-- Right Column -->
                 <div class="space-y-8">
                     <!-- Weekly Availability -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-weekly-availability">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -394,7 +394,7 @@
                     </div>
 
                     <!-- Block Dates -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-block-dates">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>

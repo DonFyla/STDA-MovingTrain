@@ -1,15 +1,25 @@
 /**
- * Lightweight booking guide + onboarding tour.
+ * Lightweight booking guide + onboarding tours.
  *
- * Renders a floating "Need help?" widget on pages that opt-in with
- * [data-guide-page], and can run a step-by-step tour across the dashboard,
- * tutors list, and booking pages.
+ * Renders a floating "Need help?" widget and can run one of several
+ * page-aware tours:
+ *   - Home tour for anonymous visitors
+ *   - Student dashboard → tutors → book coach tour
+ *   - Coach dashboard tour
  */
 (function () {
   const GUIDE_HIDDEN_KEY = "mt-guide-hidden";
-  const TOUR_SEEN_KEY = "mt-tour-seen";
   const TOUR_ACTIVE_KEY = "mt-tour-active";
   const TOUR_STEP_KEY = "mt-tour-step";
+  const TOUR_NAME_KEY = "mt-tour-name";
+  const PENDING_STUDENT_TOUR_KEY = "mt-pending-student-tour";
+  const PENDING_COACH_TOUR_KEY = "mt-pending-coach-tour";
+
+  const TOUR_SEEN_KEYS = {
+    home: "mt-home-tour-seen",
+    student: "mt-student-tour-seen",
+    coach: "mt-coach-tour-seen",
+  };
 
   const HIGHLIGHT_CLASSES = [
     "ring-4",
@@ -19,7 +29,49 @@
     "duration-500",
   ];
 
-  const TOUR_STEPS = [
+  const HOME_TOUR_STEPS = [
+    {
+      page: "home",
+      selector: '[data-tour="home-hero"]',
+      title: "Welcome to Moving Train",
+      text: "We help kids and adults fall in love with chess through world-class online coaching.",
+      position: "bottom",
+    },
+    {
+      page: "home",
+      selector: '[data-tour="home-about"]',
+      title: "Our Mission",
+      text: "We build strategic thinking, problem-solving, and sportsmanship—one move at a time.",
+      position: "top",
+    },
+    {
+      page: "home",
+      selector: '[data-tour="home-courses"]',
+      title: "Programs for Every Level",
+      text: "Choose from Beginner, Intermediate, or Expert courses based on your goals.",
+      position: "top",
+    },
+    {
+      page: "home",
+      selector: '[data-tour="home-tutors"]',
+      title: "Learn from the Best",
+      text: "Our coaches include FIDE Masters, National Champions, and experienced educators.",
+      position: "top",
+    },
+    {
+      page: "home",
+      selector: '[data-tour="home-cta"]',
+      title: "Ready to Start?",
+      text: "Create a free account to book a class, or browse our coaches first.",
+      position: "top",
+      actions: [
+        { label: "Sign Up", key: "signup" },
+        { label: "Browse Coaches", key: "tutors" },
+      ],
+    },
+  ];
+
+  const STUDENT_TOUR_STEPS = [
     {
       page: "dashboard",
       selector: null,
@@ -94,6 +146,63 @@
     },
   ];
 
+  const COACH_TOUR_STEPS = [
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-header"]',
+      title: "Coach Dashboard",
+      text: "This is where you manage your profile, availability, and bookings.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-tabs"]',
+      title: "Schedule & Profile",
+      text: "Switch between your schedule and your public coach profile.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-meeting-link"]',
+      title: "Meeting Link",
+      text: "Add your Zoom or Google Meet link so students can join sessions.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-weekly-availability"]',
+      title: "Weekly Availability",
+      text: "Set the days and times you are usually free for classes.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-block-dates"]',
+      title: "Block Dates",
+      text: "Mark dates you are unavailable so students cannot book them.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-availability-preview"]',
+      title: "Availability Preview",
+      text: "See how your schedule looks over the next seven days.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-pending-bookings"]',
+      title: "Pending Bookings",
+      text: "Review and confirm paid bookings, or reject requests you cannot take.",
+    },
+    {
+      page: "coach_dashboard",
+      selector: '[data-tour="coach-confirmed-bookings"]',
+      title: "Confirmed Bookings",
+      text: "View all upcoming sessions and student details.",
+    },
+  ];
+
+  const TOURS = {
+    home: { steps: HOME_TOUR_STEPS, seenKey: TOUR_SEEN_KEYS.home },
+    student: { steps: STUDENT_TOUR_STEPS, seenKey: TOUR_SEEN_KEYS.student },
+    coach: { steps: COACH_TOUR_STEPS, seenKey: TOUR_SEEN_KEYS.coach },
+  };
+
   const body = document.body;
   const enabled = body.dataset.guideEnabled !== "false";
   if (!enabled || localStorage.getItem(GUIDE_HIDDEN_KEY)) return;
@@ -108,6 +217,7 @@
 
   let open = false;
   let currentTourTarget = null;
+  let currentTourName = null;
 
   function buildUI() {
     root.innerHTML = `
@@ -140,8 +250,12 @@
 
   function getPageSubtitle() {
     switch (page) {
+      case "home":
+        return "New here? Take a quick tour.";
       case "dashboard":
         return "Pick a task and we'll take you there.";
+      case "coach_dashboard":
+        return "Manage your coaching schedule.";
       case "tutors":
         return "Choose the coaching option that fits you.";
       case "book_coach":
@@ -154,12 +268,45 @@
   function getActions() {
     const actions = [];
     const isAuthenticated = body.dataset.userAuthenticated === "true";
+    const isCoach = body.dataset.isCoach === "true";
 
-    if (isAuthenticated) {
+    // Tour restart action
+    if (page === "home") {
+      actions.push({
+        label: "Take a tour",
+        desc: "See what Moving Train offers in 5 steps.",
+        handler: () => startTour("home", 0, false),
+      });
+    } else if (page === "dashboard" && isAuthenticated && !isCoach) {
       actions.push({
         label: "Take a tour",
         desc: "Walk through the dashboard and booking flow.",
-        handler: () => startTour(0, true),
+        handler: () => startTour("student", 0, false),
+      });
+    } else if (page === "coach_dashboard" && isCoach) {
+      actions.push({
+        label: "Take a tour",
+        desc: "Learn your way around the coach dashboard.",
+        handler: () => startTour("coach", 0, false),
+      });
+    } else if (page === "tutors" || page === "book_coach") {
+      actions.push({
+        label: "Take a tour",
+        desc: "Walk through the dashboard and booking flow.",
+        handler: () => startTour("student", 0, true),
+      });
+    }
+
+    if (page === "home") {
+      actions.push({
+        label: "Browse coaches",
+        desc: "See our regular and elite coaches.",
+        url: pageEl && pageEl.dataset.tutorsUrl ? pageEl.dataset.tutorsUrl : "/tutors/",
+      });
+      actions.push({
+        label: "Sign up",
+        desc: "Create a free account to book classes.",
+        url: pageEl && pageEl.dataset.signupUrl ? pageEl.dataset.signupUrl : "/accounts/signup/",
       });
     }
 
@@ -239,7 +386,7 @@
       }
     }
 
-    if (!isAuthenticated && page !== "dashboard") {
+    if (!isAuthenticated && page !== "home") {
       actions.push({
         label: "Log in or sign up",
         desc: "You need an account to complete a booking.",
@@ -365,46 +512,85 @@
     });
   };
 
-  // ================= TOUR =================
+  // ================= TOURS =================
+
+  function currentTourSteps() {
+    return currentTourName ? TOURS[currentTourName].steps : [];
+  }
 
   function initTour() {
+    const isAuthenticated = body.dataset.userAuthenticated === "true";
+    const isCoach = body.dataset.isCoach === "true";
+
+    // Sign-up handoff
+    if (isAuthenticated && sessionStorage.getItem(PENDING_STUDENT_TOUR_KEY) === "true" && page === "dashboard" && !isCoach) {
+      sessionStorage.removeItem(PENDING_STUDENT_TOUR_KEY);
+      startTour("student", 0, false);
+      return;
+    }
+    if (isAuthenticated && isCoach && sessionStorage.getItem(PENDING_COACH_TOUR_KEY) === "true" && page === "coach_dashboard") {
+      sessionStorage.removeItem(PENDING_COACH_TOUR_KEY);
+      startTour("coach", 0, false);
+      return;
+    }
+
+    // Resume an active tour
     if (sessionStorage.getItem(TOUR_ACTIVE_KEY) === "true") {
+      const savedName = sessionStorage.getItem(TOUR_NAME_KEY);
       const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);
-      setTimeout(() => runStep(stepIndex), 600);
+      if (savedName && TOURS[savedName]) {
+        currentTourName = savedName;
+        setTimeout(() => runStep(stepIndex), 600);
+        return;
+      }
+    }
+
+    // First-time auto-start
+    if (!isAuthenticated && page === "home" && !localStorage.getItem(TOUR_SEEN_KEYS.home)) {
+      setTimeout(() => startTour("home", 0, false), 1500);
       return;
     }
-    if (shouldAutoStartTour()) {
-      setTimeout(() => startTour(0, false), 1500);
+    if (isAuthenticated && page === "dashboard" && !isCoach && !localStorage.getItem(TOUR_SEEN_KEYS.student)) {
+      setTimeout(() => startTour("student", 0, false), 1500);
+      return;
+    }
+    if (isAuthenticated && isCoach && page === "coach_dashboard" && !localStorage.getItem(TOUR_SEEN_KEYS.coach)) {
+      setTimeout(() => startTour("coach", 0, false), 1500);
+      return;
     }
   }
 
-  function shouldAutoStartTour() {
-    return (
-      body.dataset.userAuthenticated === "true" &&
-      page === "dashboard" &&
-      !localStorage.getItem(TOUR_SEEN_KEY)
-    );
-  }
-
-  function startTour(stepIndex, navigateToDashboard) {
+  function startTour(tourName, stepIndex, navigateToStart) {
+    if (!TOURS[tourName]) return;
     endTour(false);
+    currentTourName = tourName;
     sessionStorage.setItem(TOUR_ACTIVE_KEY, "true");
+    sessionStorage.setItem(TOUR_NAME_KEY, tourName);
     sessionStorage.setItem(TOUR_STEP_KEY, String(stepIndex));
-    if (navigateToDashboard && page !== "dashboard") {
-      window.location.href = body.dataset.dashboardUrl || "/accounts/dashboard/";
-      return;
+
+    if (navigateToStart) {
+      const startPage = TOURS[tourName].steps[0].page;
+      if (startPage !== page) {
+        const url = getStepUrl(startPage);
+        if (url) {
+          window.location.href = url;
+          return;
+        }
+      }
     }
+
     setOpen(false);
     setTimeout(() => runStep(stepIndex), 400);
   }
 
   function runStep(index) {
-    if (index < 0 || index >= TOUR_STEPS.length) {
+    const steps = currentTourSteps();
+    if (index < 0 || index >= steps.length) {
       endTour(true);
       return;
     }
     sessionStorage.setItem(TOUR_STEP_KEY, String(index));
-    const step = TOUR_STEPS[index];
+    const step = steps[index];
     if (step.page && step.page !== page) {
       const url = getStepUrl(step.page);
       if (url) {
@@ -475,14 +661,27 @@
       tooltip.setAttribute("aria-live", "polite");
       document.body.appendChild(tooltip);
     }
+    const steps = currentTourSteps();
     const isFirst = index === 0;
-    const isLast = index === TOUR_STEPS.length - 1;
+    const isLast = index === steps.length - 1;
+
+    const actionButtons = (step.actions || [])
+      .map(
+        (action) => `
+        <button type="button" data-tour-action="${action.key}" class="px-4 py-2 text-sm font-medium text-brand-700 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors">
+          ${action.label}
+        </button>
+      `
+      )
+      .join("");
+
     tooltip.innerHTML = `
       <div class="flex items-start justify-between mb-3">
         <h4 class="font-bold text-brand-900">${step.title}</h4>
-        <span class="text-xs text-brand-400 font-medium">${index + 1}/${TOUR_STEPS.length}</span>
+        <span class="text-xs text-brand-400 font-medium">${index + 1}/${steps.length}</span>
       </div>
       <p class="text-sm text-brand-700 mb-5 leading-relaxed">${step.text}</p>
+      ${actionButtons ? `<div class="flex flex-wrap gap-2 mb-5">${actionButtons}</div>` : ""}
       <div class="flex items-center justify-between">
         <button type="button" id="tour-skip" class="text-sm text-brand-500 hover:text-brand-700 font-medium">Skip tour</button>
         <div class="flex items-center gap-2">
@@ -491,6 +690,7 @@
         </div>
       </div>
     `;
+
     tooltip.querySelector("#tour-skip").addEventListener("click", () => endTour(false));
     const nextBtn = tooltip.querySelector("#tour-next");
     if (nextBtn) {
@@ -502,8 +702,27 @@
     if (!isFirst) {
       tooltip.querySelector("#tour-prev").addEventListener("click", () => runStep(index - 1));
     }
+
+    if (step.actions) {
+      tooltip.querySelectorAll("[data-tour-action]").forEach((btn) => {
+        btn.addEventListener("click", () => handleTourAction(step, btn.dataset.tourAction));
+      });
+    }
+
     requestAnimationFrame(() => tooltip.classList.remove("opacity-0", "scale-95"));
     return tooltip;
+  }
+
+  function handleTourAction(step, key) {
+    if (currentTourName === "home") {
+      localStorage.setItem(TOURS.home.seenKey, "true");
+      endTour(false);
+      if (key === "signup") {
+        window.location.href = pageEl && pageEl.dataset.signupUrl ? pageEl.dataset.signupUrl : "/accounts/signup/";
+      } else if (key === "tutors") {
+        window.location.href = pageEl && pageEl.dataset.tutorsUrl ? pageEl.dataset.tutorsUrl : "/tutors/";
+      }
+    }
   }
 
   function positionTourTooltip(tooltip, target, preferred) {
@@ -556,20 +775,25 @@
       tooltip.classList.add("opacity-0", "scale-95");
       setTimeout(() => tooltip.remove(), 200);
     }
-    sessionStorage.removeItem(TOUR_ACTIVE_KEY);
-    sessionStorage.removeItem(TOUR_STEP_KEY);
-    if (completed) {
-      localStorage.setItem(TOUR_SEEN_KEY, "true");
+    if (currentTourName) {
+      if (completed) {
+        localStorage.setItem(TOURS[currentTourName].seenKey, "true");
+      }
+      currentTourName = null;
     }
+    sessionStorage.removeItem(TOUR_ACTIVE_KEY);
+    sessionStorage.removeItem(TOUR_NAME_KEY);
+    sessionStorage.removeItem(TOUR_STEP_KEY);
   }
 
   function handleTourKey(e) {
     if (sessionStorage.getItem(TOUR_ACTIVE_KEY) !== "true") return;
+    const steps = currentTourSteps();
     if (e.key === "Escape") {
       endTour(false);
     } else if (e.key === "ArrowRight") {
       const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);
-      if (stepIndex < TOUR_STEPS.length - 1) runStep(stepIndex + 1);
+      if (stepIndex < steps.length - 1) runStep(stepIndex + 1);
       else endTour(true);
     } else if (e.key === "ArrowLeft") {
       const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);

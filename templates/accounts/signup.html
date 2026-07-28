@@ -67,4 +67,20 @@
         </div>
     </div>
 </section>
+
+<script>
+  (function () {
+    const form = document.querySelector('section form');
+    if (!form) return;
+    form.addEventListener('submit', function () {
+      const roleInput = document.querySelector('input[name="role"]:checked');
+      const role = roleInput ? roleInput.value : 'student';
+      if (role === 'student') {
+        sessionStorage.setItem('mt-pending-student-tour', 'true');
+      } else if (role === 'coach') {
+        sessionStorage.setItem('mt-pending-coach-tour', 'true');
+      }
+    });
+  })();
+</script>
 {% endblock %}

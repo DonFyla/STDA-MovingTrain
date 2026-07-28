@@ -10,11 +10,11 @@
 
 {% block content %}
 <!-- Hero -->
-<section class="relative">
+<section class="relative" data-guide-page="home" data-signup-url="{% url 'accounts:signup' %}" data-tutors-url="{% url 'tutors' %}">
     <div class="absolute inset-0 bg-gradient-to-br from-brand-100/50 to-transparent"></div>
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div class="grid lg:grid-cols-2 gap-12 items-center py-20 lg:py-28">
-            <div class="space-y-8 text-center lg:text-left -mt-[75px] lg:-mt-[370px]">
+            <div class="space-y-8 text-center lg:text-left -mt-[75px] lg:-mt-[370px]" data-tour="home-hero">
                 <div class="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm border border-brand-100">
                     <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                     <span class="text-sm font-medium text-brand-700">Now enrolling for all levels</span>
@@ -77,7 +77,7 @@
 </section>
 
 <!-- About -->
-<section id="about-us" class="py-20 lg:py-28 bg-white">
+<section id="about-us" class="py-20 lg:py-28 bg-white" data-tour="home-about">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="max-w-3xl mx-auto text-center mb-16">
             <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider">About Us</span>
@@ -98,7 +98,7 @@
 </section>
 
 <!-- Courses -->
-<section id="courses" class="py-20 lg:py-28 bg-brand-50">
+<section id="courses" class="py-20 lg:py-28 bg-brand-50" data-tour="home-courses">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-16">
             <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider">Programs</span>
@@ -132,7 +132,7 @@
 </section>
 
 <!-- Tutors -->
-<section id="tutors" class="py-20 lg:py-28 bg-white">
+<section id="tutors" class="py-20 lg:py-28 bg-white" data-tour="home-tutors">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-16">
             <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider">Expert Coaches</span>
@@ -215,7 +215,7 @@
 </section>
 
 <!-- CTA -->
-<section class="py-20 lg:py-28 bg-brand-900 text-white">
+<section class="py-20 lg:py-28 bg-brand-900 text-white" data-tour="home-cta">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h2 class="text-3xl md:text-5xl font-bold mb-6">Ready to Start Your Chess Journey?</h2>
         <p class="text-brand-200 text-lg max-w-2xl mx-auto mb-10">Contact us today to join our academy and give your child the gift of strategic thinking.</p>
