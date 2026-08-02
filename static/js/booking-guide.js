@@ -289,7 +289,7 @@
         desc: "Learn your way around the coach dashboard.",
         handler: () => startTour("coach", 0, false),
       });
-    } else if (page === "tutors" || page === "book_coach") {
+    } else if ((page === "tutors" || page === "book_coach") && isAuthenticated && !isCoach) {
       actions.push({
         label: "Take a tour",
         desc: "Walk through the dashboard and booking flow.",
@@ -518,18 +518,18 @@
     return currentTourName ? TOURS[currentTourName].steps : [];
   }
 
-  function tourSeenServerSide(tourName) {
+  function tourSeenServerSide() {
     if (!pageEl) return false;
-    const attr = pageEl.dataset.tourSeen;
-    if (attr === "true") return true;
-    return false;
+    return pageEl.dataset.tourSeen === "true";
   }
 
-  function markTourSeenOnServer(tourName) {
+  function markTourSeenOnServer(tourName, seen) {
     if (!pageEl || !pageEl.dataset.markTourSeenUrl) return;
+    if (tourName !== "student" && tourName !== "coach") return;
     const url = pageEl.dataset.markTourSeenUrl;
     const formData = new FormData();
     formData.append("tour", tourName);
+    formData.append("seen", seen ? "true" : "false");
     const csrfToken = document.querySelector('meta[name="csrf-token"]') || document.querySelector('input[name="csrfmiddlewaretoken"]');
     const headers = {};
     if (csrfToken) {
@@ -577,11 +577,11 @@
       setTimeout(() => startTour("home", 0, false), 1500);
       return;
     }
-    if (isAuthenticated && page === "dashboard" && !isCoach && !localStorage.getItem(TOUR_SEEN_KEYS.student) && !tourSeenServerSide("student")) {
+    if (isAuthenticated && page === "dashboard" && !isCoach && !localStorage.getItem(TOUR_SEEN_KEYS.student) && !tourSeenServerSide()) {
       setTimeout(() => startTour("student", 0, false), 1500);
       return;
     }
-    if (isAuthenticated && isCoach && page === "coach_dashboard" && !localStorage.getItem(TOUR_SEEN_KEYS.coach) && !tourSeenServerSide("coach")) {
+    if (isAuthenticated && isCoach && page === "coach_dashboard" && !localStorage.getItem(TOUR_SEEN_KEYS.coach) && !tourSeenServerSide()) {
       setTimeout(() => startTour("coach", 0, false), 1500);
       return;
     }
@@ -652,6 +652,9 @@
     createTourBackdrop();
     const target = step.selector ? document.querySelector(step.selector) : null;
     currentTourTarget = target;
+    if (step.selector && !target) {
+      console.warn(`[booking-guide] Tour step ${index + 1} selector not found: ${step.selector}`);
+    }
     if (target) {
       target.classList.add(...HIGHLIGHT_CLASSES);
       target.style.position = "relative";
@@ -661,6 +664,8 @@
     }
     const tooltip = createTourTooltip(step, index);
     positionTourTooltip(tooltip, target, step.position);
+    window.addEventListener("resize", handleTourReposition);
+    window.addEventListener("scroll", handleTourReposition, true);
   }
 
   function createTourBackdrop() {
@@ -790,6 +795,16 @@
     }
   }
 
+  function handleTourReposition() {
+    const tooltip = document.getElementById("tour-tooltip");
+    if (!tooltip || !currentTourName) return;
+    const steps = currentTourSteps();
+    const stepIndex = parseInt(sessionStorage.getItem(TOUR_STEP_KEY) || "0", 10);
+    const step = steps[stepIndex];
+    if (!step) return;
+    positionTourTooltip(tooltip, currentTourTarget, step.position);
+  }
+
   function endTour(completed) {
     clearTourUI();
     const backdrop = document.getElementById("tour-backdrop");
@@ -803,11 +818,17 @@
       setTimeout(() => tooltip.remove(), 200);
     }
     if (currentTourName) {
-      // Mark the tour as seen so it doesn't auto-start again on refresh.
+      // Always keep the local fallback so the tour does not restart immediately
+      // in this browser, but only persist completion server-side when the user
+      // actually finishes the tour.
       localStorage.setItem(TOURS[currentTourName].seenKey, "true");
-      markTourSeenOnServer(currentTourName);
+      if (completed) {
+        markTourSeenOnServer(currentTourName, true);
+      }
       currentTourName = null;
     }
+    window.removeEventListener("resize", handleTourReposition);
+    window.removeEventListener("scroll", handleTourReposition, true);
     sessionStorage.removeItem(TOUR_ACTIVE_KEY);
     sessionStorage.removeItem(TOUR_NAME_KEY);
     sessionStorage.removeItem(TOUR_STEP_KEY);

@@ -5,7 +5,9 @@
 {% block meta_description %}Train with Nigeria's top chess coaches including FIDE Masters, National Champions, and elite titled players. Book private lessons by the session or join a monthly program.{% endblock %}
 
 {% block content %}
-<section class="py-20 lg:py-28 bg-brand-50" data-guide-page="tutors">
+<section class="py-20 lg:py-28 bg-brand-50" data-guide-page="tutors"
+         data-tour-seen="{{ user.student_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
             <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider">Expert Coaches</span>

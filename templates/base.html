@@ -7,6 +7,7 @@
     <title>{% block title %}Moving Train Chess Academy{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}World-class online chess coaching for beginners to masters. Join Moving Train Chess Academy and make your child fall in love with thinking.{% endblock %}">
     <meta name="theme-color" content="#5E5044">
+    <meta name="csrf-token" content="{{ csrf_token }}">
 
     <!-- Canonical URL -->
     <link rel="canonical" href="{% block canonical_url %}{{ CANONICAL_URL }}{% endblock %}">
@@ -93,7 +94,6 @@
       data-user-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"
       data-is-coach="{{ user.is_coach|yesno:'true,false' }}"
       data-dashboard-url="{% url 'accounts:dashboard' %}">
-    {% csrf_token %}
     {% if GOOGLE_TAG_MANAGER_ID %}
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ GOOGLE_TAG_MANAGER_ID }}"

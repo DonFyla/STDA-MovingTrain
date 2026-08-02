@@ -4,7 +4,9 @@
 {% block title %}Book {{ coach.name }} - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="min-h-screen bg-brand-50 py-16 lg:py-24" data-guide-page="book_coach">
+<section class="min-h-screen bg-brand-50 py-16 lg:py-24" data-guide-page="book_coach"
+         data-tour-seen="{{ user.student_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <a href="{% url 'tutors' %}" class="inline-flex items-center text-brand-700 hover:text-brand-900 font-medium mb-8">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>

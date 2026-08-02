@@ -482,16 +482,40 @@ class TourSeenTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
 
-    def test_mark_tour_seen_ignores_invalid_tour(self):
+    def test_mark_tour_seen_rejects_invalid_tour(self):
         self.client.force_login(self.student)
         response = self.client.post(
             reverse("accounts:mark_tour_seen"),
             {"tour": "coach"},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         self.student.refresh_from_db()
         self.assertFalse(self.student.student_tour_seen)
         self.assertFalse(self.student.coach_tour_seen)
+
+    def test_mark_tour_seen_rejects_unknown_tour(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "unknown"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.student_tour_seen)
+        self.assertFalse(self.student.coach_tour_seen)
+
+    def test_student_can_reset_tour_seen(self):
+        self.client.force_login(self.student)
+        self.student.student_tour_seen = True
+        self.student.save(update_fields=["student_tour_seen"])
+
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "student", "seen": "false"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.student_tour_seen)
 
     def test_dashboard_passes_tour_seen_flag(self):
         self.client.force_login(self.student)

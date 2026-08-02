@@ -165,14 +165,23 @@ def dashboard_view(request):
 
 @login_required
 @require_POST
+@ratelimit(key="ip", rate="10/m", method="POST", block=True)
 def mark_tour_seen(request):
-    """Persist that the user has seen their role-specific onboarding tour."""
+    """Persist or reset the user's role-specific onboarding tour state."""
     user = request.user
     tour = request.POST.get("tour", "")
+    seen = request.POST.get("seen", "true").lower() == "true"
+
     if tour == "student" and not user.is_coach:
-        user.student_tour_seen = True
+        user.student_tour_seen = seen
         user.save(update_fields=["student_tour_seen"])
     elif tour == "coach" and user.is_coach:
-        user.coach_tour_seen = True
+        user.coach_tour_seen = seen
         user.save(update_fields=["coach_tour_seen"])
-    return JsonResponse({"success": True})
+    else:
+        return JsonResponse(
+            {"success": False, "error": "Invalid tour for this user."},
+            status=400,
+        )
+
+    return JsonResponse({"success": True, "tour": tour, "seen": seen})
