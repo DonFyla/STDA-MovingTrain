@@ -8,6 +8,17 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("signup/", views.signup_view, name="signup"),
+    path("signup/done/", views.signup_done, name="signup_done"),
+    path(
+        "verify-email/<uidb64>/<token>/",
+        views.verify_email,
+        name="verify_email",
+    ),
+    path(
+        "verify-email/resend/",
+        views.resend_verification,
+        name="resend_verification",
+    ),
     path("dashboard/", views.dashboard_view, name="dashboard"),
     path("mark-tour-seen/", views.mark_tour_seen, name="mark_tour_seen"),
 

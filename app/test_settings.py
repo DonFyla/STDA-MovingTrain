@@ -17,6 +17,9 @@ CACHES = {
 
 ALLOWED_HOSTS = ["*"]
 
+# Disable rate limiting in tests so per-IP limits can't make tests flaky.
+RATELIMIT_ENABLE = False
+
 # Dummy Flutterwave secrets so webhook signature tests run without env vars.
 FLUTTERWAVE_SECRET_KEY = "FLWSECK_TEST-dummy_secret_key_for_tests_only"
 FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-dummy_public_key_for_tests_only"

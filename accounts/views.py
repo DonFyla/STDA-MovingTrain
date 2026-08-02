@@ -1,13 +1,21 @@
 from datetime import datetime, time
 from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
+from django.core import signing
 from django.http import JsonResponse
+from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
+from .emails import send_verification_email
 from .forms import CustomUserCreationForm
+from .models import User
+from .tokens import email_verification_token
 
 
 RATELIMIT_GROUP = "accounts"
@@ -57,17 +65,69 @@ def logout_view(request):
 
 
 @ratelimit(key="ip", rate="5/m", method="POST", block=True)
+@ratelimit(key="ip", rate="10/d", method="POST", block=True)
 def signup_view(request):
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
-            user = form.save()
+            user = form.save(commit=False)
+            user.is_active = False
+            user.save()
             _create_profile_for_user(user)
-            login(request, user)
-            return redirect(_get_dashboard_url(user))
+            _send_verification_link(request, user)
+            return redirect("accounts:signup_done")
     else:
-        form = CustomUserCreationForm()
+        form = CustomUserCreationForm(
+            initial={"form_ts": signing.dumps(str(timezone.now().timestamp()))}
+        )
     return render(request, "accounts/signup.html", {"form": form})
+
+
+def _send_verification_link(request, user):
+    """Build the verification URL and email it to the user."""
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = email_verification_token.make_token(user)
+    verify_url = request.build_absolute_uri(
+        reverse("accounts:verify_email", args=[uid, token])
+    )
+    send_verification_email(user, verify_url)
+
+
+def signup_done(request):
+    return render(request, "accounts/signup_done.html")
+
+
+def verify_email(request, uidb64, token):
+    try:
+        uid = urlsafe_base64_decode(uidb64).decode()
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if user is not None and user.is_active:
+        messages.info(request, "Your email is already verified. You can log in.")
+        return redirect("accounts:login")
+
+    if user is not None and email_verification_token.check_token(user, token):
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+        login(request, user)
+        return redirect(_get_dashboard_url(user))
+
+    return render(request, "accounts/verify_email_invalid.html")
+
+
+@ratelimit(key="ip", rate="3/m", method="POST", block=True)
+def resend_verification(request):
+    sent = False
+    if request.method == "POST":
+        email = request.POST.get("email", "").strip()
+        user = User.objects.filter(email__iexact=email, is_active=False).first()
+        if user is not None:
+            _send_verification_link(request, user)
+        # Always show the same confirmation to avoid leaking which emails exist.
+        sent = True
+    return render(request, "accounts/resend_verification.html", {"sent": sent})
 
 
 def _create_profile_for_user(user):

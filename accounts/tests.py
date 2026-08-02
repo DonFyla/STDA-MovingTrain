@@ -1,11 +1,21 @@
 from datetime import date, time
+from time import time as unix_time
 
+from django.core import mail, signing
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from accounts.tokens import email_verification_token
 from scheduling.models import Coach, Student
 
 User = get_user_model()
+
+
+def _valid_form_ts(age_seconds=10):
+    """A signed form timestamp old enough to pass the time-trap check."""
+    return signing.dumps(str(unix_time() - age_seconds))
 
 
 class CustomUserChangeFormRoleTests(TestCase):
@@ -195,7 +205,7 @@ class AccountsViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "accounts/signup.html")
 
-    def test_signup_creates_student_and_redirects_to_dashboard(self):
+    def test_signup_creates_inactive_student_and_sends_verification_email(self):
         response = self.client.post(
             reverse("accounts:signup"),
             {
@@ -206,16 +216,20 @@ class AccountsViewsTests(TestCase):
                 "role": "student",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
+                "form_ts": _valid_form_ts(),
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("accounts:dashboard"))
+        self.assertEqual(response.url, reverse("accounts:signup_done"))
         user = User.objects.get(email="new@example.com")
         self.assertTrue(user.is_student)
         self.assertFalse(user.is_coach)
+        self.assertFalse(user.is_active)
         self.assertTrue(Student.objects.filter(user=user).exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/verify-email/", mail.outbox[0].body)
 
-    def test_signup_creates_coach_and_redirects_to_scheduling_dashboard(self):
+    def test_signup_creates_inactive_coach_and_sends_verification_email(self):
         response = self.client.post(
             reverse("accounts:signup"),
             {
@@ -226,17 +240,21 @@ class AccountsViewsTests(TestCase):
                 "role": "coach",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
+                "form_ts": _valid_form_ts(),
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("scheduling:coach_dashboard"))
+        self.assertEqual(response.url, reverse("accounts:signup_done"))
         user = User.objects.get(email="coachsignup@example.com")
         self.assertTrue(user.is_coach)
         self.assertFalse(user.is_student)
+        self.assertFalse(user.is_active)
         self.assertTrue(Coach.objects.filter(user=user).exists())
         coach = Coach.objects.get(user=user)
         self.assertEqual(coach.name, "Coach Signup")
         self.assertEqual(coach.email, "coachsignup@example.com")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/verify-email/", mail.outbox[0].body)
 
     def test_dashboard_requires_login(self):
         response = self.client.get(reverse("accounts:dashboard"))
@@ -523,3 +541,132 @@ class TourSeenTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-tour-seen="false"')
         self.assertContains(response, reverse("accounts:mark_tour_seen"))
+
+
+class AntiBotSignupTests(TestCase):
+    def _signup(self, email, **overrides):
+        data = {
+            "email": email,
+            "username": email.split("@")[0],
+            "full_name": "Test Signup",
+            "phone": "",
+            "role": "student",
+            "password1": "StrongPass123!",
+            "password2": "StrongPass123!",
+            "form_ts": _valid_form_ts(),
+        }
+        data.update(overrides)
+        return self.client.post(reverse("accounts:signup"), data)
+
+    def test_honeypot_filled_rejects_signup(self):
+        response = self._signup("bot@example.com", company="spammy")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email="bot@example.com").exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_time_trap_rejects_instant_submission(self):
+        response = self._signup("fast@example.com", form_ts=signing.dumps(str(unix_time())))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email="fast@example.com").exists())
+
+    def test_time_trap_rejects_forged_timestamp(self):
+        response = self._signup("forged@example.com", form_ts="not-a-signature")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email="forged@example.com").exists())
+
+    def test_signup_done_page_renders(self):
+        response = self.client.get(reverse("accounts:signup_done"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/signup_done.html")
+
+
+class EmailVerificationTests(TestCase):
+    def _create_unverified_user(self, email="unverified@example.com", **kwargs):
+        defaults = {
+            "username": email.split("@")[0],
+            "password": "testpass123",
+            "is_active": False,
+        }
+        defaults.update(kwargs)
+        return User.objects.create_user(email=email, **defaults)
+
+    def _verify_url(self, user, token=None):
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = token or email_verification_token.make_token(user)
+        return reverse("accounts:verify_email", args=[uid, token])
+
+    def test_verify_email_activates_and_logs_in_student(self):
+        user = self._create_unverified_user()
+        response = self.client.get(self._verify_url(user))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("accounts:dashboard"))
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertEqual(response.wsgi_request.user, user)
+
+    def test_verify_email_redirects_coach_to_coach_dashboard(self):
+        user = self._create_unverified_user(
+            email="coachverify@example.com",
+            is_coach=True,
+            is_student=False,
+        )
+        Coach.objects.create(user=user, name="Coach Verify", email=user.email)
+        response = self.client.get(self._verify_url(user))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("scheduling:coach_dashboard"))
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    def test_verify_email_with_bad_token_stays_inactive(self):
+        user = self._create_unverified_user()
+        response = self.client.get(self._verify_url(user, token="bogus-token"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/verify_email_invalid.html")
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_verify_email_token_invalid_after_activation(self):
+        user = self._create_unverified_user()
+        url = self._verify_url(user)
+        self.client.get(url)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        # Replaying the same link must not succeed again.
+        self.client.logout()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("accounts:login"))
+
+    def test_login_blocked_before_verification(self):
+        self._create_unverified_user()
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "unverified@example.com", "password": "testpass123"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_resend_sends_email_to_inactive_user(self):
+        self._create_unverified_user()
+        response = self.client.post(
+            reverse("accounts:resend_verification"),
+            {"email": "unverified@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "we've sent a fresh verification link")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/verify-email/", mail.outbox[0].body)
+
+    def test_resend_unknown_email_shows_same_confirmation(self):
+        response = self.client.post(
+            reverse("accounts:resend_verification"),
+            {"email": "ghost@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "we've sent a fresh verification link")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_resend_page_renders(self):
+        response = self.client.get(reverse("accounts:resend_verification"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/resend_verification.html")

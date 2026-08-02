@@ -1,6 +1,14 @@
+import time
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
+from django.core import signing
 from .models import User
+
+# Minimum seconds a human needs to fill the signup form; faster means bot.
+MIN_FORM_FILL_SECONDS = 3
+# Signed form timestamps older than this are rejected (stale/tampered).
+FORM_TS_MAX_AGE_SECONDS = 3600
 
 
 class CustomUserCreationForm(UserCreationForm):
@@ -14,10 +22,40 @@ class CustomUserCreationForm(UserCreationForm):
         widget=forms.RadioSelect,
         label="I am signing up as a",
     )
+    # Honeypot: invisible to humans, auto-filled by bots. Must stay empty.
+    company = forms.CharField(
+        required=False,
+        label="Company",
+        widget=forms.TextInput(attrs={"tabindex": "-1", "autocomplete": "off"}),
+    )
+    # Signed render timestamp; rejects instant and stale/forged submissions.
+    form_ts = forms.CharField(required=True, widget=forms.HiddenInput)
 
     class Meta:
         model = User
         fields = ("email", "username", "full_name", "phone", "role")
+
+    def clean_form_ts(self):
+        value = self.cleaned_data.get("form_ts", "")
+        try:
+            ts = float(signing.loads(value, max_age=FORM_TS_MAX_AGE_SECONDS))
+        except (signing.BadSignature, signing.SignatureExpired, ValueError):
+            raise forms.ValidationError(
+                "Something went wrong. Please reload the page and try again."
+            )
+        if time.time() - ts < MIN_FORM_FILL_SECONDS:
+            raise forms.ValidationError(
+                "Something went wrong. Please reload the page and try again."
+            )
+        return value
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("company"):
+            raise forms.ValidationError(
+                "Something went wrong. Please reload the page and try again."
+            )
+        return cleaned_data
 
     def save(self, commit=True):
         user = super().save(commit=False)
