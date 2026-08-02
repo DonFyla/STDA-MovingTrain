@@ -518,6 +518,33 @@
     return currentTourName ? TOURS[currentTourName].steps : [];
   }
 
+  function tourSeenServerSide(tourName) {
+    if (!pageEl) return false;
+    const attr = pageEl.dataset.tourSeen;
+    if (attr === "true") return true;
+    return false;
+  }
+
+  function markTourSeenOnServer(tourName) {
+    if (!pageEl || !pageEl.dataset.markTourSeenUrl) return;
+    const url = pageEl.dataset.markTourSeenUrl;
+    const formData = new FormData();
+    formData.append("tour", tourName);
+    const csrfToken = document.querySelector('meta[name="csrf-token"]') || document.querySelector('input[name="csrfmiddlewaretoken"]');
+    const headers = {};
+    if (csrfToken) {
+      headers["X-CSRFToken"] = csrfToken.content || csrfToken.value;
+    }
+    fetch(url, {
+      method: "POST",
+      body: formData,
+      headers,
+      credentials: "same-origin",
+    }).catch(() => {
+      // Ignore network errors so the tour UX is not blocked.
+    });
+  }
+
   function initTour() {
     const isAuthenticated = body.dataset.userAuthenticated === "true";
     const isCoach = body.dataset.isCoach === "true";
@@ -550,11 +577,11 @@
       setTimeout(() => startTour("home", 0, false), 1500);
       return;
     }
-    if (isAuthenticated && page === "dashboard" && !isCoach && !localStorage.getItem(TOUR_SEEN_KEYS.student)) {
+    if (isAuthenticated && page === "dashboard" && !isCoach && !localStorage.getItem(TOUR_SEEN_KEYS.student) && !tourSeenServerSide("student")) {
       setTimeout(() => startTour("student", 0, false), 1500);
       return;
     }
-    if (isAuthenticated && isCoach && page === "coach_dashboard" && !localStorage.getItem(TOUR_SEEN_KEYS.coach)) {
+    if (isAuthenticated && isCoach && page === "coach_dashboard" && !localStorage.getItem(TOUR_SEEN_KEYS.coach) && !tourSeenServerSide("coach")) {
       setTimeout(() => startTour("coach", 0, false), 1500);
       return;
     }
@@ -776,9 +803,9 @@
       setTimeout(() => tooltip.remove(), 200);
     }
     if (currentTourName) {
-      if (completed) {
-        localStorage.setItem(TOURS[currentTourName].seenKey, "true");
-      }
+      // Mark the tour as seen so it doesn't auto-start again on refresh.
+      localStorage.setItem(TOURS[currentTourName].seenKey, "true");
+      markTourSeenOnServer(currentTourName);
       currentTourName = null;
     }
     sessionStorage.removeItem(TOUR_ACTIVE_KEY);

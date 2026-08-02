@@ -12,7 +12,9 @@
          data-tutors-url="{% url 'tutors' %}"
          data-tour-tutors-url="{% url 'tutors' %}"
          data-buy-points-url="{% url 'payments:buy_points' %}"
-         data-quiz-url="{% url 'quiz:register' %}">
+         data-quiz-url="{% url 'quiz:register' %}"
+         data-tour-seen="{{ user.student_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">

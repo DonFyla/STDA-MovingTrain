@@ -93,6 +93,7 @@
       data-user-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"
       data-is-coach="{{ user.is_coach|yesno:'true,false' }}"
       data-dashboard-url="{% url 'accounts:dashboard' %}">
+    {% csrf_token %}
     {% if GOOGLE_TAG_MANAGER_ID %}
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ GOOGLE_TAG_MANAGER_ID }}"

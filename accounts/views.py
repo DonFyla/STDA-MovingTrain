@@ -3,6 +3,8 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
 from .forms import CustomUserCreationForm
@@ -159,3 +161,18 @@ def dashboard_view(request):
         "quiz_history": quiz_history,
     }
     return render(request, "accounts/dashboard_student.html", context)
+
+
+@login_required
+@require_POST
+def mark_tour_seen(request):
+    """Persist that the user has seen their role-specific onboarding tour."""
+    user = request.user
+    tour = request.POST.get("tour", "")
+    if tour == "student" and not user.is_coach:
+        user.student_tour_seen = True
+        user.save(update_fields=["student_tour_seen"])
+    elif tour == "coach" and user.is_coach:
+        user.coach_tour_seen = True
+        user.save(update_fields=["coach_tour_seen"])
+    return JsonResponse({"success": True})

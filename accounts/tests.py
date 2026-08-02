@@ -435,3 +435,67 @@ class StudentDashboardPointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Flex Coach")
         self.assertContains(response, "Points History")
+
+
+class TourSeenTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(
+            email="tourstudent@example.com",
+            username="tourstudent",
+            password="testpass123",
+            is_coach=False,
+        )
+        self.coach_user = User.objects.create_user(
+            email="tourcoach@example.com",
+            username="tourcoach",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+        )
+
+    def test_student_can_mark_tour_seen(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "student"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.student_tour_seen)
+        self.assertFalse(self.student.coach_tour_seen)
+
+    def test_coach_can_mark_tour_seen(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "coach"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.coach_user.refresh_from_db()
+        self.assertTrue(self.coach_user.coach_tour_seen)
+        self.assertFalse(self.coach_user.student_tour_seen)
+
+    def test_mark_tour_seen_requires_login(self):
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "student"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_mark_tour_seen_ignores_invalid_tour(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "coach"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.student_tour_seen)
+        self.assertFalse(self.student.coach_tour_seen)
+
+    def test_dashboard_passes_tour_seen_flag(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-tour-seen="false"')
+        self.assertContains(response, reverse("accounts:mark_tour_seen"))

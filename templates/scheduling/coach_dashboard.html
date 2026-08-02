@@ -7,7 +7,9 @@
 {% block title %}Coach Dashboard - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="min-h-screen bg-brand-50 pb-16" data-guide-page="coach_dashboard">
+<section class="min-h-screen bg-brand-50 pb-16" data-guide-page="coach_dashboard"
+         data-tour-seen="{{ user.coach_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <!-- Header -->
     <header class="bg-white border-b border-brand-100" data-tour="coach-header">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
