@@ -99,6 +99,16 @@ CACHES = {
     }
 }
 
+# Rate limiting: read the client IP set by the nginx reverse proxy instead of
+# REMOTE_ADDR (which is always the proxy's address). nginx overwrites X-Real-IP,
+# so clients cannot spoof it. Falls back to REMOTE_ADDR when not behind nginx
+# (e.g. local development).
+def _client_ip_for_ratelimit(request):
+    return request.META.get("HTTP_X_REAL_IP") or request.META.get("REMOTE_ADDR", "")
+
+
+RATELIMIT_IP_META_KEY = _client_ip_for_ratelimit
+
 # Sessions
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
