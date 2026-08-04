@@ -1,0 +1,117 @@
+/* CKEditor 5 editing-canvas typography (loaded via CKEDITOR_5_CUSTOM_CSS).
+   Styles what authors see while writing; kept light to match the pages
+   where quiz content is rendered. */
+
+.ck.ck-content {
+    line-height: 1.7;
+    font-size: 1rem;
+}
+
+.ck.ck-content p {
+    margin: 0 0 1em;
+}
+
+.ck.ck-content h2,
+.ck.ck-content h3,
+.ck.ck-content h4 {
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 1.4em 0 0.6em;
+}
+
+.ck.ck-content h2 { font-size: 1.5em; }
+.ck.ck-content h3 { font-size: 1.25em; }
+.ck.ck-content h4 { font-size: 1.1em; }
+
+.ck.ck-content ul,
+.ck.ck-content ol {
+    margin: 0 0 1em;
+    padding-left: 1.5em;
+}
+
+.ck.ck-content ul { list-style: disc; }
+.ck.ck-content ol { list-style: decimal; }
+
+.ck.ck-content blockquote {
+    border-left: 4px solid #a98b6e;
+    margin: 1.2em 0;
+    padding: 0.4em 0 0.4em 1em;
+    font-style: italic;
+    color: #4a3f35;
+}
+
+.ck.ck-content a {
+    color: #8f7057;
+    text-decoration: underline;
+}
+
+.ck.ck-content code {
+    background: #f5efe7;
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    font-family: ui-monospace, monospace;
+    font-size: 0.9em;
+}
+
+.ck.ck-content pre {
+    background: #221d19;
+    color: #f5efe7;
+    border-radius: 8px;
+    padding: 1em;
+    overflow-x: auto;
+}
+
+.ck.ck-content pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+}
+
+.ck.ck-content figure.image {
+    margin: 1.2em auto;
+}
+
+.ck.ck-content figure.image img {
+    border-radius: 8px;
+    max-width: 100%;
+    height: auto;
+}
+
+.ck.ck-content figure.image figcaption {
+    text-align: center;
+    font-size: 0.85em;
+    color: #8f7057;
+    margin-top: 0.4em;
+}
+
+.ck.ck-content figure.table {
+    margin: 1.2em 0;
+    overflow-x: auto;
+}
+
+.ck.ck-content table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.ck.ck-content table td,
+.ck.ck-content table th {
+    border: 1px solid #d4c3b0;
+    padding: 0.5em 0.75em;
+}
+
+.ck.ck-content table th {
+    background: #f5efe7;
+    font-weight: 600;
+}
+
+.ck.ck-content hr {
+    border: none;
+    border-top: 1px solid #d4c3b0;
+    margin: 2em 0;
+}
+
+/* Keep the editable area visually distinct from the page */
+.ck.ck-editor__editable {
+    min-height: 240px;
+}

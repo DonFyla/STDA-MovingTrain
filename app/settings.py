@@ -153,16 +153,65 @@ AUTH_USER_MODEL = "accounts.User"
 # CKEditor 5
 CKEDITOR_5_CONFIGS = {
     "default": {
-        "toolbar": [
-            "heading", "|",
-            "bold", "italic", "link", "|",
-            "bulletedList", "numberedList", "blockQuote", "|",
-            "imageUpload", "|",
-            "undo", "redo",
-        ],
+        "toolbar": {
+            "items": [
+                "heading", "|",
+                "bold", "italic", "underline", "strikethrough", "code",
+                "subscript", "superscript", "highlight", "|",
+                "fontSize", "fontColor", "fontBackgroundColor", "alignment", "|",
+                "link", "blockQuote", "codeBlock", "|",
+                "bulletedList", "numberedList", "outdent", "indent", "|",
+                "imageUpload", "insertTable", "mediaEmbed", "horizontalLine",
+                "specialCharacters", "|",
+                "findAndReplace", "selectAll", "removeFormat", "sourceEditing", "|",
+                "undo", "redo",
+            ],
+            "shouldNotGroupWhenFull": True,
+        },
+        "heading": {
+            "options": [
+                {"model": "paragraph", "title": "Paragraph", "class": "ck-heading_paragraph"},
+                {"model": "heading2", "view": "h2", "title": "Heading 2", "class": "ck-heading_heading2"},
+                {"model": "heading3", "view": "h3", "title": "Heading 3", "class": "ck-heading_heading3"},
+                {"model": "heading4", "view": "h4", "title": "Heading 4", "class": "ck-heading_heading4"},
+            ],
+        },
+        "fontSize": {
+            "options": ["tiny", "small", "default", "big", "huge"],
+        },
+        "image": {
+            "toolbar": [
+                "imageTextAlternative", "toggleImageCaption", "|",
+                "imageStyle:inline", "imageStyle:block", "imageStyle:side", "|",
+                "resizeImage",
+            ],
+            "resizeUnit": "px",
+            "resizeOptions": [
+                {"name": "resizeImage:original", "label": "Original", "value": None},
+                {"name": "resizeImage:custom", "label": "Custom", "value": "custom"},
+                {"name": "resizeImage:25", "label": "Small (25%)", "value": "25"},
+                {"name": "resizeImage:50", "label": "Medium (50%)", "value": "50"},
+                {"name": "resizeImage:75", "label": "Large (75%)", "value": "75"},
+            ],
+        },
+        "table": {
+            "contentToolbar": [
+                "tableColumn", "tableRow", "mergeTableCells",
+                "tableProperties", "tableCellProperties",
+            ],
+        },
+        "link": {
+            "defaultProtocol": "https://",
+        },
+        "htmlSupport": {
+            "allow": [
+                {"name": "img", "attributes": ["width", "height", "style"], "classes": True},
+            ],
+        },
     },
 }
 CKEDITOR_5_FILE_UPLOAD_PERMISSION = "authenticated"
+CKEDITOR_5_CUSTOM_CSS = "css/ckeditor5-content.css"
 
 # Email
 EMAIL_BACKEND = config(
