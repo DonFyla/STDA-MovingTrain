@@ -180,18 +180,14 @@ CKEDITOR_5_CONFIGS = {
             "options": ["tiny", "small", "default", "big", "huge"],
         },
         "image": {
+            # Note: resize options are left at CKEditor's defaults
+            # (Original / Custom / 25% / 50% / 75% + drag handles). A custom
+            # "value": None for the original option would be serialized to
+            # null, which crashes django-ckeditor-5's JSON.parse reviver.
             "toolbar": [
-                "imageTextAlternative", "toggleImageCaption", "|",
+                "toggleImageCaption", "|",
                 "imageStyle:inline", "imageStyle:block", "imageStyle:side", "|",
-                "resizeImage",
-            ],
-            "resizeUnit": "px",
-            "resizeOptions": [
-                {"name": "resizeImage:original", "label": "Original", "value": None},
-                {"name": "resizeImage:custom", "label": "Custom", "value": "custom"},
-                {"name": "resizeImage:25", "label": "Small (25%)", "value": "25"},
-                {"name": "resizeImage:50", "label": "Medium (50%)", "value": "50"},
-                {"name": "resizeImage:75", "label": "Large (75%)", "value": "75"},
+                "linkImage", "resizeImage",
             ],
         },
         "table": {
