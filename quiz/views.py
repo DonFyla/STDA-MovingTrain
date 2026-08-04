@@ -1,9 +1,11 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Max
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
 from .models import Questionnaire, Question, Qtaker, Options
-from .forms import QtakerForm, AnswerForm
+from .forms import CoachQuestionForm, QtakerForm, AnswerForm
 
 
 QUESTIONS_PER_SESSION = 5
@@ -29,7 +31,7 @@ def _register_quiz_attempt(request, qtaker):
 
 def _build_session(qtaker, questionnaire):
     """Build a randomized question session for a qtaker if needed."""
-    all_questions = Question.objects.filter(questionnaire=questionnaire)
+    all_questions = Question.objects.filter(questionnaire=questionnaire, is_approved=True)
     if not all_questions.exists():
         return None
     question_count = all_questions.count()
@@ -276,7 +278,7 @@ def quiz_result_view(request, qtaker_id):
     total_questions = (
         len(qtaker.current_question_set)
         if qtaker.current_question_set
-        else Question.objects.filter(questionnaire=questionnaire).count()
+        else Question.objects.filter(questionnaire=questionnaire, is_approved=True).count()
     )
 
     percent = (
@@ -295,7 +297,7 @@ def quiz_result_view(request, qtaker_id):
         if next_skill:
             try:
                 next_questionnaire = Questionnaire.objects.get(title=next_skill)
-                all_questions = Question.objects.filter(questionnaire=next_questionnaire)
+                all_questions = Question.objects.filter(questionnaire=next_questionnaire, is_approved=True)
                 if all_questions.exists():
                     question_count = all_questions.count()
                     questions_to_take = min(QUESTIONS_PER_SESSION, question_count)
@@ -334,3 +336,56 @@ def quiz_result_view(request, qtaker_id):
         "result_share_text": f"I scored {percent:.0f}% on the Moving Train Chess Quiz! Can you beat me?",
     }
     return render(request, "quiz/result.html", context)
+
+
+@login_required
+def submit_question_view(request):
+    """Allow coaches to submit quiz questions for staff review."""
+    if not request.user.is_coach:
+        messages.error(request, "Only coach accounts can submit quiz questions.")
+        return redirect("accounts:dashboard")
+
+    if request.method == "POST":
+        form = CoachQuestionForm(request.POST)
+        if form.is_valid():
+            question = form.save(commit=False)
+            question.created_by = request.user
+            question.is_approved = False
+            max_placement = (
+                Question.objects.filter(questionnaire=question.questionnaire)
+                .aggregate(Max("placement"))["placement__max"]
+                or 0
+            )
+            question.placement = max_placement + 1
+            question.save()
+
+            if question.question_type == "radio":
+                correct_option = form.cleaned_data["correct_option"]
+                for i in range(1, 5):
+                    text = (form.cleaned_data.get(f"option_{i}") or "").strip()
+                    if text:
+                        Options.objects.create(
+                            question=question,
+                            text=text,
+                            correct=(str(i) == correct_option),
+                        )
+            else:
+                Options.objects.create(
+                    question=question,
+                    text=form.cleaned_data["expected_answer"].strip(),
+                    correct=True,
+                )
+
+            messages.success(
+                request,
+                "Question submitted for review. It will appear in quizzes once approved.",
+            )
+            return redirect("scheduling:coach_dashboard")
+    else:
+        form = CoachQuestionForm()
+
+    return render(
+        request,
+        "quiz/submit_question.html",
+        {"form": form, "option_fields": [form[f"option_{i}"] for i in range(1, 5)]},
+    )

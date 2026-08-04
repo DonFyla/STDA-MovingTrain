@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from .models import Questionnaire, Question, Options, Qtaker
+from .views import _build_session
 
 User = get_user_model()
 
@@ -22,6 +23,7 @@ class QuizTemplateTests(TestCase):
             question_type="radio",
             placement=1,
             created_by=self.user,
+            is_approved=True,
         )
         self.correct_option = Options.objects.create(
             question=self.beginner_question, text="Queen", correct=True
@@ -41,6 +43,7 @@ class QuizTemplateTests(TestCase):
             question_type="radio",
             placement=1,
             created_by=self.user,
+            is_approved=True,
         )
         Options.objects.create(
             question=self.intermediate_question,
@@ -220,6 +223,7 @@ class QuizTemplateTests(TestCase):
                     question_type="radio",
                     placement=i + 1,
                     created_by=user,
+                    is_approved=True,
                 )
                 Options.objects.create(question=q, text="Correct", correct=True)
                 Options.objects.create(question=q, text="Wrong", correct=False)
@@ -370,3 +374,161 @@ class QuizFixtureFlowTests(TestCase):
             reverse("quiz:question", args=[qtaker.id, qtaker.next_question_set[0]])
         )
         self.assertEqual(response.status_code, 200)
+
+
+class CoachQuestionSubmissionTests(TestCase):
+    def setUp(self):
+        self.coach = User.objects.create_user(
+            username="coach", password="testpass", email="coach@example.com"
+        )
+        self.coach.is_coach = True
+        self.coach.save()
+        self.student = User.objects.create_user(
+            username="student", password="testpass", email="student@example.com"
+        )
+        self.questionnaire = Questionnaire.objects.create(
+            title="beginner", description="Beginner level quiz", created_by=self.coach
+        )
+
+    def _radio_post_data(self, **overrides):
+        data = {
+            "questionnaire": self.questionnaire.id,
+            "question_type": "radio",
+            "question": "Which piece moves in an L shape?",
+            "option_1": "Rook",
+            "option_2": "Knight",
+            "option_3": "Bishop",
+            "option_4": "",
+            "correct_option": "2",
+        }
+        data.update(overrides)
+        return data
+
+    def test_submit_page_requires_login(self):
+        response = self.client.get(reverse("quiz:submit_question"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response.url)
+
+    def test_coach_can_submit_radio_question(self):
+        self.client.force_login(self.coach)
+        response = self.client.post(
+            reverse("quiz:submit_question"), self._radio_post_data()
+        )
+        self.assertRedirects(
+            response, reverse("scheduling:coach_dashboard"), fetch_redirect_response=False
+        )
+        question = Question.objects.get(created_by=self.coach)
+        self.assertFalse(question.is_approved)
+        self.assertEqual(question.placement, 1)
+        options = Options.objects.filter(question=question)
+        self.assertEqual(options.count(), 3)
+        correct = options.get(correct=True)
+        self.assertEqual(correct.text, "Knight")
+
+    def test_coach_can_submit_text_question(self):
+        self.client.force_login(self.coach)
+        response = self.client.post(
+            reverse("quiz:submit_question"),
+            {
+                "questionnaire": self.questionnaire.id,
+                "question_type": "text",
+                "question": "Name the piece that can castle.",
+                "expected_answer": "  King  ",
+            },
+        )
+        self.assertRedirects(
+            response, reverse("scheduling:coach_dashboard"), fetch_redirect_response=False
+        )
+        question = Question.objects.get(created_by=self.coach)
+        self.assertFalse(question.is_approved)
+        option = Options.objects.get(question=question)
+        self.assertTrue(option.correct)
+        self.assertEqual(option.text, "King")
+
+    def test_submission_gets_next_placement(self):
+        Question.objects.create(
+            questionnaire=self.questionnaire,
+            question="Existing question",
+            question_type="radio",
+            placement=7,
+            created_by=self.coach,
+            is_approved=True,
+        )
+        self.client.force_login(self.coach)
+        self.client.post(reverse("quiz:submit_question"), self._radio_post_data())
+        question = Question.objects.exclude(placement=7).get()
+        self.assertEqual(question.placement, 8)
+
+    def test_student_cannot_submit(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("quiz:submit_question"))
+        self.assertRedirects(
+            response, reverse("accounts:dashboard"), fetch_redirect_response=False
+        )
+        response = self.client.post(
+            reverse("quiz:submit_question"), self._radio_post_data()
+        )
+        self.assertRedirects(
+            response, reverse("accounts:dashboard"), fetch_redirect_response=False
+        )
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_radio_requires_correct_option(self):
+        self.client.force_login(self.coach)
+        response = self.client.post(
+            reverse("quiz:submit_question"),
+            self._radio_post_data(correct_option=""),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_radio_correct_option_must_be_filled(self):
+        self.client.force_login(self.coach)
+        response = self.client.post(
+            reverse("quiz:submit_question"),
+            self._radio_post_data(correct_option="4"),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_radio_requires_two_options(self):
+        self.client.force_login(self.coach)
+        response = self.client.post(
+            reverse("quiz:submit_question"),
+            self._radio_post_data(option_2="", option_3="", correct_option="1"),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_text_requires_expected_answer(self):
+        self.client.force_login(self.coach)
+        response = self.client.post(
+            reverse("quiz:submit_question"),
+            {
+                "questionnaire": self.questionnaire.id,
+                "question_type": "text",
+                "question": "Name the piece that can castle.",
+                "expected_answer": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_unapproved_questions_not_served_until_approved(self):
+        question = Question.objects.create(
+            questionnaire=self.questionnaire,
+            question="Pending question",
+            question_type="radio",
+            placement=1,
+            created_by=self.coach,
+            is_approved=False,
+        )
+        qtaker = Qtaker.objects.create(
+            name="Taker", age=10, email="taker@example.com", skill="beginner"
+        )
+        self.assertIsNone(_build_session(qtaker, self.questionnaire))
+
+        question.is_approved = True
+        question.save()
+        session = _build_session(qtaker, self.questionnaire)
+        self.assertIn(question.id, session)

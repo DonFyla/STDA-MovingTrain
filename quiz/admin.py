@@ -18,10 +18,13 @@ class QuestionAdmin(admin.ModelAdmin):
         "questionnaire",
         "question_preview",
         "placement",
+        "is_approved",
         "created_at",
         "updated_at",
         "created_by",
     ]
+    list_filter = ["is_approved", "questionnaire"]
+    list_editable = ["is_approved"]
     inlines = [AnswerInline]
 
     def question_preview(self, obj):
