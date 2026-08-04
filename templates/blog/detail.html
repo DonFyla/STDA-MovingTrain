@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ post.title }} - Moving Train Chess Academy{% endblock %}
+{% block meta_description %}{{ post.excerpt|default:post.title }}{% endblock %}
+{% block og_title %}{{ post.title }}{% endblock %}
+{% block og_description %}{{ post.excerpt|default:post.title }}{% endblock %}
+{% block og_image %}{% if post.cover_image %}{{ request.scheme }}://{{ request.get_host }}{{ post.cover_image.url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/others/logo.svg' %}{% endif %}{% endblock %}
+
+{% block content %}
+<section class="py-16 lg:py-24 bg-brand-50 min-h-screen">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <article class="max-w-3xl mx-auto">
+            <a href="{% url 'blog:post_list' %}" class="inline-flex items-center text-brand-700 hover:text-brand-900 font-medium mb-8">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                All posts
+            </a>
+
+            <header class="mb-8">
+                <h1 class="text-3xl lg:text-4xl font-bold text-brand-900 mb-4">{{ post.title }}</h1>
+                <div class="flex items-center gap-3 text-sm text-brand-600">
+                    <span class="font-medium text-brand-800">{{ post.author_display_name }}</span>
+                    <span aria-hidden="true">·</span>
+                    <time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"F j, Y" }}</time>
+                </div>
+            </header>
+
+            {% if post.cover_image %}
+                <img src="{{ post.cover_image.url }}" alt="{{ post.title }}" class="w-full rounded-2xl mb-8 shadow-md">
+            {% endif %}
+
+            <div class="bg-white rounded-2xl border border-brand-100 p-6 md:p-10 ckeditor-content">
+                {{ post.body|safe }}
+            </div>
+        </article>
+
+        {% if more_posts %}
+            <div class="max-w-3xl mx-auto mt-16">
+                <h2 class="text-xl font-bold text-brand-900 mb-6">More posts</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    {% for other in more_posts %}
+                        <a href="{% url 'blog:post_detail' other.slug %}" class="card p-5 hover:shadow-md transition-shadow group">
+                            <h3 class="font-semibold text-brand-900 group-hover:text-brand-700 transition-colors text-sm mb-2">{{ other.title }}</h3>
+                            <p class="text-xs text-brand-500">{{ other.published_at|date:"M j, Y" }}</p>
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

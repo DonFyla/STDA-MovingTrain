@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "scheduling",
     "payments",
     "admin_portal",
+    "blog",
 ]
 
 MIDDLEWARE = [
@@ -195,6 +196,9 @@ SITE_DEFAULT_IMAGE = config(
 
 # In-page booking guide widget
 GUIDE_ENABLED = config("GUIDE_ENABLED", default=True, cast=bool)
+
+# Blog: allow student accounts to write posts (coaches always can)
+BLOG_ALLOW_STUDENT_POSTS = config("BLOG_ALLOW_STUDENT_POSTS", default=False, cast=bool)
 
 # Security headers (enable in production)
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)

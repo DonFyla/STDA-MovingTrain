@@ -22,10 +22,17 @@
                 <h1 class="text-2xl lg:text-3xl font-bold text-brand-900">Welcome back, {{ user.full_name|default:user.email }}!</h1>
                 <p class="text-brand-600 mt-1">Manage your classes, points, and progress.</p>
             </div>
-            <a href="{% url 'tutors' %}" class="btn-primary inline-flex items-center justify-center self-start">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                Book a Session
-            </a>
+            <div class="flex items-center gap-3 self-start">
+                {% if BLOG_ALLOW_STUDENT_POSTS %}
+                    <a href="{% url 'blog:my_posts' %}" class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-brand-700 bg-white rounded-full border border-brand-200 hover:bg-brand-50 transition-colors">
+                        My Blog Posts
+                    </a>
+                {% endif %}
+                <a href="{% url 'tutors' %}" class="btn-primary inline-flex items-center justify-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    Book a Session
+                </a>
+            </div>
         </div>
 
         <!-- Quick Actions -->
