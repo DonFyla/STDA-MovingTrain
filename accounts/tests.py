@@ -670,3 +670,115 @@ class EmailVerificationTests(TestCase):
         response = self.client.get(reverse("accounts:resend_verification"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "accounts/resend_verification.html")
+
+
+class ProfileEditTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(
+            email="profilestudent@example.com",
+            username="profilestudent",
+            password="testpass123",
+            full_name="Profile Student",
+            is_coach=False,
+        )
+        self.coach_user = User.objects.create_user(
+            email="profilecoach@example.com",
+            username="profilecoach",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+        )
+
+    def _payload(self, **overrides):
+        data = {
+            "full_name": "Updated Name",
+            "phone": "08012345678",
+            "date_of_birth": "2012-05-14",
+            "parent_name": "Parent Name",
+            "parent_phone": "08099998888",
+            "school": "Test Academy",
+            "chess_rating": 1200,
+            "bio": "I love chess.",
+        }
+        data.update(overrides)
+        return data
+
+    def test_profile_edit_requires_login(self):
+        response = self.client.get(reverse("accounts:profile_edit"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+    def test_student_can_view_profile_edit_page(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("accounts:profile_edit"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/profile_edit.html")
+
+    def test_student_can_update_account_and_profile_fields(self):
+        self.client.force_login(self.student)
+        response = self.client.post(reverse("accounts:profile_edit"), self._payload())
+        self.assertEqual(response.status_code, 302)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.full_name, "Updated Name")
+        self.assertEqual(self.student.phone, "08012345678")
+        profile = Student.objects.get(user=self.student)
+        self.assertEqual(str(profile.date_of_birth), "2012-05-14")
+        self.assertEqual(profile.parent_name, "Parent Name")
+        self.assertEqual(profile.parent_phone, "08099998888")
+        self.assertEqual(profile.school, "Test Academy")
+        self.assertEqual(profile.chess_rating, 1200)
+        self.assertEqual(profile.bio, "I love chess.")
+
+    def test_invalid_date_rejected_without_saving(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:profile_edit"),
+            self._payload(date_of_birth="not-a-date"),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertNotEqual(self.student.full_name, "Updated Name")
+
+    def test_coach_redirected_to_coach_dashboard(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("accounts:profile_edit"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("scheduling:coach_dashboard"))
+
+
+class PasswordChangeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="pwchange@example.com",
+            username="pwchange",
+            password="OldPass123!",
+        )
+
+    def test_password_change_flow(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:password_change"),
+            {
+                "old_password": "OldPass123!",
+                "new_password1": "NewStrongPass456!",
+                "new_password2": "NewStrongPass456!",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("accounts:password_change_done"))
+        # Session is kept alive after the change.
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+        # New password works, old one does not.
+        self.client.logout()
+        self.assertTrue(
+            self.client.login(username="pwchange@example.com", password="NewStrongPass456!")
+        )
+        self.client.logout()
+        self.assertFalse(
+            self.client.login(username="pwchange@example.com", password="OldPass123!")
+        )
+
+    def test_password_change_requires_login(self):
+        response = self.client.get(reverse("accounts:password_change"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)

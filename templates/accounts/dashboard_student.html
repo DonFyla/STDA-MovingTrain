@@ -329,8 +329,9 @@
 
             <!-- Account Info -->
             <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-                <div class="px-5 py-4 border-b border-brand-100">
+                <div class="px-5 py-4 border-b border-brand-100 flex items-center justify-between">
                     <h2 class="font-bold text-brand-900">Account Information</h2>
+                    <a href="{% url 'accounts:profile_edit' %}" class="text-sm font-medium text-brand-700 hover:text-brand-900">Edit profile →</a>
                 </div>
                 <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div>

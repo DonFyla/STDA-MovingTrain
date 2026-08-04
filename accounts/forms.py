@@ -3,6 +3,7 @@ import time
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.core import signing
+from scheduling.models import Student
 from .models import User
 
 # Minimum seconds a human needs to fill the signup form; faster means bot.
@@ -138,3 +139,30 @@ class CustomUserChangeForm(UserChangeForm):
                 user=user,
                 defaults={"parent_phone": user.phone},
             )
+
+
+class ProfileUpdateForm(forms.ModelForm):
+    """Editable account fields on the User model."""
+
+    class Meta:
+        model = User
+        fields = ("full_name", "phone")
+
+
+class StudentProfileForm(forms.ModelForm):
+    """Editable scheduling profile fields for student accounts."""
+
+    class Meta:
+        model = Student
+        fields = (
+            "date_of_birth",
+            "parent_name",
+            "parent_phone",
+            "school",
+            "chess_rating",
+            "bio",
+        )
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "bio": forms.Textarea(attrs={"rows": 4}),
+        }

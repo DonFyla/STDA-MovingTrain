@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
 from .emails import send_verification_email
-from .forms import CustomUserCreationForm
+from .forms import CustomUserCreationForm, ProfileUpdateForm, StudentProfileForm
 from .models import User
 from .tokens import email_verification_token
 
@@ -245,3 +245,34 @@ def mark_tour_seen(request):
         )
 
     return JsonResponse({"success": True, "tour": tour, "seen": seen})
+
+
+@login_required
+def profile_edit(request):
+    """Edit the student's account and scheduling profile fields."""
+    user = request.user
+    if user.is_coach:
+        messages.info(request, "Edit your profile from the coach dashboard.")
+        return redirect("scheduling:coach_dashboard")
+
+    from scheduling.models import Student
+
+    student_profile, _ = Student.objects.get_or_create(user=user)
+
+    if request.method == "POST":
+        user_form = ProfileUpdateForm(request.POST, instance=user)
+        profile_form = StudentProfileForm(request.POST, instance=student_profile)
+        if user_form.is_valid() and profile_form.is_valid():
+            user_form.save()
+            profile_form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("accounts:profile_edit")
+    else:
+        user_form = ProfileUpdateForm(instance=user)
+        profile_form = StudentProfileForm(instance=student_profile)
+
+    return render(
+        request,
+        "accounts/profile_edit.html",
+        {"user_form": user_form, "profile_form": profile_form},
+    )
