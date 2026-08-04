@@ -4,27 +4,27 @@
 {% block meta_description %}Chess tips, training advice, and stories from the Moving Train Chess Academy community.{% endblock %}
 
 {% block content %}
-<section class="py-16 lg:py-24 bg-brand-50 min-h-screen">
+<section class="py-16 lg:py-24 bg-brand-900 min-h-screen">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
-            <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider">Blog</span>
-            <h1 class="section-title mt-3 mb-4">From the Board</h1>
-            <p class="text-lg text-brand-700 max-w-2xl mx-auto">Chess tips, training advice, and stories from our coaches and community.</p>
+            <span class="text-brand-400 font-semibold text-sm uppercase tracking-wider">Blog</span>
+            <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold text-brand-50 tracking-tight mt-3 mb-4">From the Board</h1>
+            <p class="text-lg text-brand-300 max-w-2xl mx-auto">Chess tips, training advice, and stories from our coaches and community.</p>
         </div>
 
         {% if page_obj.object_list %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                 {% for post in page_obj.object_list %}
-                    <a href="{% url 'blog:post_detail' post.slug %}" class="card overflow-hidden hover:shadow-xl transition-shadow group flex flex-col">
+                    <a href="{% url 'blog:post_detail' post.slug %}" class="bg-brand-800 rounded-2xl border border-brand-700 overflow-hidden hover:border-brand-500 transition-colors group flex flex-col">
                         {% if post.cover_image %}
                             <img src="{{ post.cover_image.url }}" alt="{{ post.title }}" class="w-full h-48 object-cover">
                         {% endif %}
                         <div class="p-6 flex flex-col flex-1">
-                            <h2 class="font-bold text-lg text-brand-900 group-hover:text-brand-700 transition-colors mb-2">{{ post.title }}</h2>
+                            <h2 class="font-bold text-lg text-brand-50 group-hover:text-brand-300 transition-colors mb-2">{{ post.title }}</h2>
                             {% if post.excerpt %}
-                                <p class="text-sm text-brand-600 leading-relaxed mb-4">{{ post.excerpt|truncatewords:30 }}</p>
+                                <p class="text-sm text-brand-300 leading-relaxed mb-4">{{ post.excerpt|truncatewords:30 }}</p>
                             {% endif %}
-                            <div class="mt-auto pt-2 text-xs text-brand-500 flex items-center justify-between">
+                            <div class="mt-auto pt-2 text-xs text-brand-400 flex items-center justify-between">
                                 <span>{{ post.author_display_name }}</span>
                                 <span>{{ post.published_at|date:"M j, Y" }}</span>
                             </div>
@@ -36,18 +36,18 @@
             {% if page_obj.paginator.num_pages > 1 %}
                 <nav class="mt-12 flex justify-center items-center gap-4" aria-label="Pagination">
                     {% if page_obj.has_previous %}
-                        <a href="?page={{ page_obj.previous_page_number }}" class="px-4 py-2 text-sm font-medium text-brand-700 bg-white rounded-full border border-brand-200 hover:bg-brand-50 transition-colors">← Newer</a>
+                        <a href="?page={{ page_obj.previous_page_number }}" class="px-4 py-2 text-sm font-medium text-brand-200 bg-brand-800 rounded-full border border-brand-700 hover:border-brand-500 transition-colors">← Newer</a>
                     {% endif %}
-                    <span class="text-sm text-brand-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    <span class="text-sm text-brand-400">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
                     {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}" class="px-4 py-2 text-sm font-medium text-brand-700 bg-white rounded-full border border-brand-200 hover:bg-brand-50 transition-colors">Older →</a>
+                        <a href="?page={{ page_obj.next_page_number }}" class="px-4 py-2 text-sm font-medium text-brand-200 bg-brand-800 rounded-full border border-brand-700 hover:border-brand-500 transition-colors">Older →</a>
                     {% endif %}
                 </nav>
             {% endif %}
         {% else %}
-            <div class="max-w-md mx-auto bg-white rounded-2xl border border-brand-100 p-10 text-center">
-                <h2 class="font-semibold text-brand-900 mb-2">No posts yet</h2>
-                <p class="text-brand-600 text-sm">Check back soon — our coaches are working on their first articles.</p>
+            <div class="max-w-md mx-auto bg-brand-800 rounded-2xl border border-brand-700 p-10 text-center">
+                <h2 class="font-semibold text-brand-50 mb-2">No posts yet</h2>
+                <p class="text-brand-300 text-sm">Check back soon — our coaches are working on their first articles.</p>
             </div>
         {% endif %}
     </div>

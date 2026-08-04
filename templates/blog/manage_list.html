@@ -3,44 +3,44 @@
 {% block title %}My Blog Posts - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="min-h-screen bg-brand-50 py-12">
+<section class="min-h-screen bg-brand-900 py-12">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="max-w-4xl mx-auto">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
-                    <h1 class="text-2xl lg:text-3xl font-bold text-brand-900">My Blog Posts</h1>
-                    <p class="text-brand-600 mt-1">Write, publish, and manage your articles.</p>
+                    <h1 class="text-2xl lg:text-3xl font-bold text-brand-50">My Blog Posts</h1>
+                    <p class="text-brand-300 mt-1">Write, publish, and manage your articles.</p>
                 </div>
-                <a href="{% url 'blog:post_create' %}" class="btn-primary inline-flex items-center justify-center self-start">
+                <a href="{% url 'blog:post_create' %}" class="inline-flex items-center justify-center self-start px-6 py-3 bg-brand-400 text-brand-900 font-semibold rounded-full hover:bg-brand-300 transition-colors">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                     New Post
                 </a>
             </div>
 
             {% if posts %}
-                <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-                    <div class="divide-y divide-brand-100">
+                <div class="bg-brand-800 rounded-2xl border border-brand-700 overflow-hidden">
+                    <div class="divide-y divide-brand-700">
                         {% for post in posts %}
                             <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div>
-                                    <p class="font-semibold text-brand-900">{{ post.title }}</p>
-                                    <p class="text-sm text-brand-500 mt-1">
+                                    <p class="font-semibold text-brand-50">{{ post.title }}</p>
+                                    <p class="text-sm text-brand-400 mt-1">
                                         Updated {{ post.updated_at|date:"M j, Y" }}
                                         {% if post.is_published %}· Published {{ post.published_at|date:"M j, Y" }}{% endif %}
                                     </p>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
-                                        {% if post.is_published %}bg-emerald-100 text-emerald-700{% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border
+                                        {% if post.is_published %}bg-emerald-900/50 text-emerald-300 border-emerald-700{% else %}bg-amber-900/50 text-amber-300 border-amber-700{% endif %}">
                                         {% if post.is_published %}Published{% else %}Draft{% endif %}
                                     </span>
                                     {% if post.is_published %}
-                                        <a href="{% url 'blog:post_detail' post.slug %}" class="text-sm font-medium text-brand-700 hover:text-brand-900 underline">View</a>
+                                        <a href="{% url 'blog:post_detail' post.slug %}" class="text-sm font-medium text-brand-400 hover:text-brand-300 underline transition-colors">View</a>
                                     {% endif %}
-                                    <a href="{% url 'blog:post_edit' post.slug %}" class="text-sm font-medium text-brand-700 hover:text-brand-900 underline">Edit</a>
+                                    <a href="{% url 'blog:post_edit' post.slug %}" class="text-sm font-medium text-brand-400 hover:text-brand-300 underline transition-colors">Edit</a>
                                     <form method="post" action="{% url 'blog:post_delete' post.slug %}" onsubmit="return confirm('Delete this post? This cannot be undone.');">
                                         {% csrf_token %}
-                                        <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-800 underline">Delete</button>
+                                        <button type="submit" class="text-sm font-medium text-red-400 hover:text-red-300 underline transition-colors">Delete</button>
                                     </form>
                                 </div>
                             </div>
@@ -48,10 +48,10 @@
                     </div>
                 </div>
             {% else %}
-                <div class="bg-white rounded-2xl border border-brand-100 p-10 text-center">
-                    <h2 class="font-semibold text-brand-900 mb-2">Nothing here yet</h2>
-                    <p class="text-brand-600 text-sm mb-4">Share your chess knowledge with the community.</p>
-                    <a href="{% url 'blog:post_create' %}" class="btn-primary text-sm">Write your first post</a>
+                <div class="bg-brand-800 rounded-2xl border border-brand-700 p-10 text-center">
+                    <h2 class="font-semibold text-brand-50 mb-2">Nothing here yet</h2>
+                    <p class="text-brand-300 text-sm mb-4">Share your chess knowledge with the community.</p>
+                    <a href="{% url 'blog:post_create' %}" class="inline-flex items-center px-6 py-3 bg-brand-400 text-brand-900 font-semibold rounded-full hover:bg-brand-300 transition-colors text-sm">Write your first post</a>
                 </div>
             {% endif %}
         </div>

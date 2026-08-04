@@ -25,3 +25,84 @@
     @apply bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden;
   }
 }
+
+/* Rendered CKEditor 5 content on dark blog pages */
+@layer components {
+  .ckeditor-content {
+    @apply text-brand-100 leading-relaxed text-lg;
+  }
+  .ckeditor-content h2 {
+    @apply text-brand-50 text-2xl font-bold tracking-tight mt-10 mb-4;
+  }
+  .ckeditor-content h3 {
+    @apply text-brand-50 text-xl font-bold tracking-tight mt-8 mb-3;
+  }
+  .ckeditor-content h4 {
+    @apply text-brand-50 text-lg font-semibold mt-6 mb-2;
+  }
+  .ckeditor-content p {
+    @apply mb-5;
+  }
+  .ckeditor-content a {
+    @apply text-brand-400 underline underline-offset-2 hover:text-brand-300 transition-colors;
+  }
+  .ckeditor-content strong {
+    @apply text-brand-50;
+  }
+  .ckeditor-content ul {
+    @apply list-disc pl-6 mb-5 space-y-1;
+  }
+  .ckeditor-content ol {
+    @apply list-decimal pl-6 mb-5 space-y-1;
+  }
+  .ckeditor-content blockquote {
+    @apply border-l-4 border-brand-500 bg-brand-800 rounded-r-xl px-5 py-3 my-6 italic text-brand-200;
+  }
+  .ckeditor-content code {
+    @apply bg-brand-800 text-brand-100 rounded px-1.5 py-0.5 text-sm font-mono;
+  }
+  .ckeditor-content pre {
+    @apply bg-brand-800 border border-brand-700 rounded-xl p-4 overflow-x-auto mb-6;
+  }
+  .ckeditor-content pre code {
+    @apply bg-transparent p-0;
+  }
+  .ckeditor-content mark {
+    @apply bg-amber-300 text-brand-900 rounded px-0.5;
+  }
+  .ckeditor-content img {
+    @apply rounded-xl max-w-full h-auto;
+  }
+  .ckeditor-content figure {
+    @apply my-8;
+  }
+  .ckeditor-content figure.image {
+    @apply mx-auto;
+  }
+  .ckeditor-content figcaption {
+    @apply text-center text-sm text-brand-400 mt-3;
+  }
+  .ckeditor-content .image-style-align-left {
+    @apply float-left mr-6 mb-4 max-w-[45%];
+  }
+  .ckeditor-content .image-style-align-right,
+  .ckeditor-content .image-style-side {
+    @apply float-right ml-6 mb-4 max-w-[45%];
+  }
+  .ckeditor-content .image-style-align-center {
+    @apply mx-auto;
+  }
+  .ckeditor-content table {
+    @apply w-full border-collapse my-6 text-base;
+  }
+  .ckeditor-content th,
+  .ckeditor-content td {
+    @apply border border-brand-700 px-3 py-2 text-left;
+  }
+  .ckeditor-content th {
+    @apply bg-brand-800 text-brand-50 font-semibold;
+  }
+  .ckeditor-content hr {
+    @apply border-brand-700 my-10;
+  }
+}

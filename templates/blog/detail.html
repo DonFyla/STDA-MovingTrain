@@ -8,40 +8,51 @@
 {% block og_image %}{% if post.cover_image %}{{ request.scheme }}://{{ request.get_host }}{{ post.cover_image.url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/others/logo.svg' %}{% endif %}{% endblock %}
 
 {% block content %}
-<section class="py-16 lg:py-24 bg-brand-50 min-h-screen">
+<section class="py-16 lg:py-24 bg-brand-900 min-h-screen">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-        <article class="max-w-3xl mx-auto">
-            <a href="{% url 'blog:post_list' %}" class="inline-flex items-center text-brand-700 hover:text-brand-900 font-medium mb-8">
+        <article class="max-w-2xl mx-auto">
+            <a href="{% url 'blog:post_list' %}" class="inline-flex items-center text-brand-400 hover:text-brand-300 font-medium mb-10 transition-colors">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                 All posts
             </a>
 
-            <header class="mb-8">
-                <h1 class="text-3xl lg:text-4xl font-bold text-brand-900 mb-4">{{ post.title }}</h1>
-                <div class="flex items-center gap-3 text-sm text-brand-600">
-                    <span class="font-medium text-brand-800">{{ post.author_display_name }}</span>
-                    <span aria-hidden="true">·</span>
-                    <time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"F j, Y" }}</time>
+            <header class="mb-10">
+                <h1 class="text-4xl lg:text-5xl font-bold text-brand-50 tracking-tight leading-tight mb-6">{{ post.title }}</h1>
+                <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-brand-700 text-brand-100 font-semibold text-sm select-none">
+                        {{ post.author_display_name|first|upper }}
+                    </span>
+                    <div class="text-sm">
+                        <p class="font-medium text-brand-100">{{ post.author_display_name }}</p>
+                        <time datetime="{{ post.published_at|date:'c' }}" class="text-brand-400">{{ post.published_at|date:"F j, Y" }}</time>
+                    </div>
                 </div>
             </header>
 
             {% if post.cover_image %}
-                <img src="{{ post.cover_image.url }}" alt="{{ post.title }}" class="w-full rounded-2xl mb-8 shadow-md">
+                <img src="{{ post.cover_image.url }}" alt="{{ post.title }}" class="w-full rounded-2xl mb-10 shadow-lg">
             {% endif %}
 
-            <div class="bg-white rounded-2xl border border-brand-100 p-6 md:p-10 ckeditor-content">
+            <div class="ckeditor-content">
                 {{ post.body|safe }}
             </div>
+
+            <hr class="border-brand-700 mt-12">
         </article>
 
         {% if more_posts %}
-            <div class="max-w-3xl mx-auto mt-16">
-                <h2 class="text-xl font-bold text-brand-900 mb-6">More posts</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div class="max-w-2xl mx-auto mt-12">
+                <h2 class="text-xl font-bold text-brand-50 mb-6">More posts</h2>
+                <div class="space-y-4">
                     {% for other in more_posts %}
-                        <a href="{% url 'blog:post_detail' other.slug %}" class="card p-5 hover:shadow-md transition-shadow group">
-                            <h3 class="font-semibold text-brand-900 group-hover:text-brand-700 transition-colors text-sm mb-2">{{ other.title }}</h3>
-                            <p class="text-xs text-brand-500">{{ other.published_at|date:"M j, Y" }}</p>
+                        <a href="{% url 'blog:post_detail' other.slug %}" class="flex items-center gap-4 bg-brand-800 border border-brand-700 rounded-2xl p-5 hover:border-brand-500 transition-colors group">
+                            {% if other.cover_image %}
+                                <img src="{{ other.cover_image.url }}" alt="" class="w-16 h-16 rounded-xl object-cover flex-none">
+                            {% endif %}
+                            <div class="min-w-0">
+                                <h3 class="font-semibold text-brand-50 group-hover:text-brand-300 transition-colors truncate">{{ other.title }}</h3>
+                                <p class="text-sm text-brand-400 mt-1">{{ other.author_display_name }} · {{ other.published_at|date:"M j, Y" }}</p>
+                            </div>
                         </a>
                     {% endfor %}
                 </div>
