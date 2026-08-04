@@ -1,7 +1,6 @@
 from django.db import models
 from django.conf import settings
-from ckeditor.fields import RichTextField
-from ckeditor_uploader.fields import RichTextUploadingField
+from django_ckeditor_5.fields import CKEditor5Field
 
 
 class Questionnaire(models.Model):
@@ -67,7 +66,7 @@ class Question(models.Model):
     question_type = models.CharField(
         choices=QUESTION_TYPES, max_length=20, default="radio"
     )
-    question = RichTextUploadingField()
+    question = CKEditor5Field("Text", config_name="default")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

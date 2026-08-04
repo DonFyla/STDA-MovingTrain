@@ -28,8 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.sitemaps",
     "django_extensions",
     "widget_tweaks",
-    "ckeditor",
-    "ckeditor_uploader",
+    "django_ckeditor_5",
     # Local apps
     "web",
     "accounts",
@@ -142,7 +141,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
-CKEDITOR_UPLOAD_PATH = "uploads/"
+CKEDITOR_5_UPLOAD_PATH = "uploads/"
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -150,19 +149,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Custom user model
 AUTH_USER_MODEL = "accounts.User"
 
-# Silence known warnings
-# TODO: Migrate from django-ckeditor (CKEditor 4) to a maintained editor
-# (e.g., django-ckeditor-5 or a plain textarea) to resolve the security warning.
-SILENCED_SYSTEM_CHECKS = ["ckeditor.W001"]
-
-# CKEditor
-CKEDITOR_CONFIGS = {
+# CKEditor 5
+CKEDITOR_5_CONFIGS = {
     "default": {
-        "toolbar": "full",
-        "height": 300,
-        "width": "100%",
+        "toolbar": [
+            "heading", "|",
+            "bold", "italic", "link", "|",
+            "bulletedList", "numberedList", "blockQuote", "|",
+            "imageUpload", "|",
+            "undo", "redo",
+        ],
     },
 }
+CKEDITOR_5_FILE_UPLOAD_PERMISSION = "authenticated"
 
 # Email
 EMAIL_BACKEND = config(
