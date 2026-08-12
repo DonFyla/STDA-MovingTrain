@@ -98,6 +98,7 @@
                                 Cost: <span id="selected-cost" class="font-bold text-brand-900">0</span> points
                             </div>
                         </div>
+                        <p class="text-sm text-brand-500 mb-4">Sessions must be booked at least 24 hours in advance. Sooner slots appear greyed out.</p>
                         <div id="calendar-container" data-tour="time-selection" class="space-y-6"></div>
                     </div>
 
@@ -213,6 +214,7 @@
                         </div>
                         <input type="hidden" name="day_of_week_1" id="r-day-of-week-1" value="{{ recurring_form.day_of_week_1.value|default:'' }}">
                         {{ recurring_form.time_slot_1 }}
+                        <p class="text-sm text-brand-500 mb-4">Your first session must be at least 24 hours from now.</p>
                         <div id="r-slots-container-1" class="hidden">
                             <p class="text-sm font-medium text-brand-700 mb-3">Select Time</p>
                             <div class="flex flex-wrap gap-3" id="r-slots-list-1"></div>
@@ -244,6 +246,7 @@
                         </div>
                         <input type="hidden" name="day_of_week_2" id="r-day-of-week-2" value="{{ recurring_form.day_of_week_2.value|default:'' }}">
                         {{ recurring_form.time_slot_2 }}
+                        <p class="text-sm text-brand-500 mb-4">Your first session must be at least 24 hours from now.</p>
                         <div id="r-slots-container-2" class="hidden">
                             <p class="text-sm font-medium text-brand-700 mb-3">Select Time</p>
                             <div class="flex flex-wrap gap-3" id="r-slots-list-2"></div>
@@ -328,6 +331,7 @@
                                     Rate: ₦{{ price_per_session|floatformat:0 }} / session
                                 </div>
                             </div>
+                            <p class="text-sm text-brand-500 mb-4">Sessions must be booked at least 24 hours in advance. Sooner slots appear greyed out.</p>
                             <div id="special-calendar-container" class="space-y-6"></div>
                         </div>
 
@@ -475,6 +479,17 @@
         return new Date(lagosStr + 'T00:00:00');
     }
 
+    function getLagosNow() {
+        // Naive Date whose fields match Lagos wall-clock time
+        return new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    }
+
+    function isWithinNoticePeriod(dateStr, startTime) {
+        const minBookingTime = getLagosNow();
+        minBookingTime.setHours(minBookingTime.getHours() + 24);
+        return new Date(dateStr + 'T' + startTime + ':00') <= minBookingTime;
+    }
+
     function generateCalendar() {
         const container = document.getElementById('calendar-container');
         container.innerHTML = '';
@@ -523,6 +538,9 @@
                 } else {
                     content = '<div class="space-y-1">' + availableSlots.map(slot => {
                         const isSelected = selectedPointsSlots.some(s => s.date === dateStr && s.start_time === slot.start_time);
+                        if (isWithinNoticePeriod(dateStr, slot.start_time)) {
+                            return `<button type="button" disabled title="Book at least 24 hours in advance" class="w-full text-xs py-1.5 px-1 rounded bg-gray-100 text-gray-400 cursor-not-allowed">${formatTime(slot.start_time)}</button>`;
+                        }
                         return `<button type="button" onclick="togglePointsSlot('${dateStr}', ${dayIndex}, '${slot.start_time}', '${slot.end_time}')" class="w-full text-xs py-1.5 px-1 rounded transition-colors ${isSelected ? 'bg-brand-600 text-white' : 'bg-white hover:bg-brand-100 border border-brand-200 text-brand-700'}">${formatTime(slot.start_time)}</button>`;
                     }).join('') + '</div>';
                 }
@@ -543,6 +561,9 @@
 
     function togglePointsSlot(dateStr, dayOfWeek, startTime, endTime) {
         const existingIndex = selectedPointsSlots.findIndex(s => s.date === dateStr && s.start_time === startTime);
+        if (existingIndex < 0 && isWithinNoticePeriod(dateStr, startTime)) {
+            return;
+        }
         if (existingIndex >= 0) {
             selectedPointsSlots.splice(existingIndex, 1);
         } else {
@@ -854,6 +875,9 @@
                 } else {
                     content = '<div class="space-y-1">' + availableSlots.map(slot => {
                         const isSelected = selectedSpecialSlots.some(s => s.date === dateStr && s.start_time === slot.start_time);
+                        if (isWithinNoticePeriod(dateStr, slot.start_time)) {
+                            return `<button type="button" disabled title="Book at least 24 hours in advance" class="w-full text-xs py-1.5 px-1 rounded bg-gray-100 text-gray-400 cursor-not-allowed">${formatTime(slot.start_time)}</button>`;
+                        }
                         return `<button type="button" onclick="toggleSpecialSlot('${dateStr}', ${dayIndex}, '${slot.start_time}', '${slot.end_time}')" class="w-full text-xs py-1.5 px-1 rounded transition-colors ${isSelected ? 'bg-brand-600 text-white' : 'bg-white hover:bg-brand-100 border border-brand-200 text-brand-700'}">${formatTime(slot.start_time)}</button>`;
                     }).join('') + '</div>';
                 }
@@ -874,6 +898,9 @@
 
     function toggleSpecialSlot(dateStr, dayOfWeek, startTime, endTime) {
         const existingIndex = selectedSpecialSlots.findIndex(s => s.date === dateStr && s.start_time === startTime);
+        if (existingIndex < 0 && isWithinNoticePeriod(dateStr, startTime)) {
+            return;
+        }
         if (existingIndex >= 0) {
             selectedSpecialSlots.splice(existingIndex, 1);
         } else {

@@ -126,6 +126,25 @@ class CoachBlockedDateForm(forms.ModelForm):
         return cleaned
 
 
+MINIMUM_BOOKING_NOTICE_HOURS = 24
+
+
+def validate_minimum_notice(session_date, start_time):
+    """Raise ValidationError if the session starts less than 24 hours from now."""
+    from datetime import datetime, timedelta
+    from django.utils import timezone
+
+    session_start = timezone.make_aware(
+        datetime.combine(session_date, start_time),
+        timezone.get_current_timezone(),
+    )
+    if session_start < timezone.now() + timedelta(hours=MINIMUM_BOOKING_NOTICE_HOURS):
+        raise forms.ValidationError(
+            "Sessions must be booked at least 24 hours in advance. "
+            "Please choose a later date or time."
+        )
+
+
 class BookingForm(forms.ModelForm):
     BOOKING_MODE_CHOICES = [
         ("single", "Once a Week (4 sessions/month)"),
@@ -194,6 +213,22 @@ class BookingForm(forms.ModelForm):
                 cleaned["end_time_2"] = forms.TimeField().clean(end_2)
             except ValueError:
                 raise forms.ValidationError("Invalid time slot selected for the second session.")
+
+        # The first session of each weekly slot must be at least 24 hours away
+        from datetime import timedelta
+        from django.utils import timezone
+
+        today = timezone.now().date()
+
+        def first_session_date(day_index):
+            days_ahead = int(day_index) - (today.weekday() + 1) % 7
+            if days_ahead <= 0:
+                days_ahead += 7
+            return today + timedelta(days=days_ahead)
+
+        validate_minimum_notice(first_session_date(day_1), cleaned["start_time_1"])
+        if mode == "double":
+            validate_minimum_notice(first_session_date(day_2), cleaned["start_time_2"])
 
         return cleaned
 
@@ -297,6 +332,7 @@ class PointsBookingForm(forms.Form):
                     end_time = datetime.strptime(slot["end_time"], "%H:%M").time()
                 except (KeyError, ValueError, TypeError):
                     raise forms.ValidationError("Invalid slot format.")
+                validate_minimum_notice(session_date, start_time)
                 if not is_slot_available(self.coach, session_date, start_time, end_time):
                     raise forms.ValidationError(
                         f"{slot['date']} {slot['start_time']}-{slot['end_time']} is no longer available. "
@@ -339,6 +375,7 @@ class SpecialBookingForm(forms.Form):
                     end_time = datetime.strptime(slot["end_time"], "%H:%M").time()
                 except (KeyError, ValueError, TypeError):
                     raise forms.ValidationError("Invalid session format.")
+                validate_minimum_notice(session_date, start_time)
                 if not is_slot_available(self.coach, session_date, start_time, end_time):
                     raise forms.ValidationError(
                         f"{slot['date']} {slot['start_time']}-{slot['end_time']} is no longer available. "

@@ -1,5 +1,5 @@
 import json
-from datetime import date, time, timedelta
+from datetime import date, time, timedelta, timezone as dt_timezone
 from unittest.mock import patch
 from django.core import mail
 from django.test import TestCase
@@ -429,6 +429,13 @@ class BookingFlowTests(TestCase):
             start_time=time(14, 0),
             end_time=time(15, 0),
         )
+        # Freeze time so weekday-based slots always satisfy the 24h booking notice
+        now_patcher = patch(
+            "django.utils.timezone.now",
+            return_value=timezone.datetime(2026, 1, 5, 9, 0, tzinfo=dt_timezone.utc),
+        )
+        now_patcher.start()
+        self.addCleanup(now_patcher.stop)
 
     def test_booking_page_requires_login(self):
         response = self.client.get(reverse("scheduling:book_coach", args=[self.coach.id]))
@@ -895,6 +902,13 @@ class PointsBookingFlowTests(TestCase):
             start_time=time(14, 0),
             end_time=time(15, 0),
         )
+        # Freeze time so weekday-based slots always satisfy the 24h booking notice
+        now_patcher = patch(
+            "django.utils.timezone.now",
+            return_value=timezone.datetime(2026, 1, 5, 9, 0, tzinfo=dt_timezone.utc),
+        )
+        now_patcher.start()
+        self.addCleanup(now_patcher.stop)
 
     def _future_monday(self):
         from datetime import timedelta as _td
@@ -1063,6 +1077,13 @@ class SpecialBookingFlowTests(TestCase):
             email="regular@example.com",
             is_special=False,
         )
+        # Freeze time so weekday-based slots always satisfy the 24h booking notice
+        now_patcher = patch(
+            "django.utils.timezone.now",
+            return_value=timezone.datetime(2026, 1, 5, 9, 0, tzinfo=dt_timezone.utc),
+        )
+        now_patcher.start()
+        self.addCleanup(now_patcher.stop)
 
     def test_special_tab_shown_for_special_coach(self):
         self.client.force_login(self.student)
@@ -1254,3 +1275,103 @@ class SpecialBookingFlowTests(TestCase):
         # 12 * 15000 = 180000, 15% discount = 153000
         self.assertEqual(booking.total_amount, 153000)
         self.assertEqual(response.status_code, 200)
+
+
+class MinimumBookingNoticeTests(TestCase):
+    """All booking flows reject sessions starting less than 24 hours from now."""
+
+    def setUp(self):
+        self.coach = Coach.objects.create(
+            name="Notice Coach",
+            email="notice@example.com",
+            hourly_rate=10000,
+            points_cost=1,
+        )
+        AvailabilitySlot.objects.create(
+            coach=self.coach,
+            day_of_week=2,  # Tuesday
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+        )
+        # Freeze "now" at Monday 2026-01-05 09:00 UTC (10:00 in Africa/Lagos).
+        # The 24h cutoff is therefore Tuesday 2026-01-06 10:00 Lagos time.
+        now_patcher = patch(
+            "django.utils.timezone.now",
+            return_value=timezone.datetime(2026, 1, 5, 9, 0, tzinfo=dt_timezone.utc),
+        )
+        now_patcher.start()
+        self.addCleanup(now_patcher.stop)
+
+    def _points_form(self, slots):
+        from .forms import PointsBookingForm
+
+        return PointsBookingForm(
+            data={
+                "selected_slots": json.dumps(slots),
+                "student_name": "Notice Student",
+                "student_email": "student@example.com",
+            },
+            coach=self.coach,
+        )
+
+    def _special_form(self, slots):
+        from .forms import SpecialBookingForm
+
+        return SpecialBookingForm(
+            data={
+                "selected_slots": json.dumps(slots),
+                "student_name": "Notice Student",
+                "student_email": "student@example.com",
+            },
+            coach=self.coach,
+        )
+
+    def _recurring_form(self, day_of_week, time_slot):
+        from .forms import BookingForm
+
+        return BookingForm(
+            data={
+                "booking_mode": "single",
+                "day_of_week_1": str(day_of_week),
+                "time_slot_1": time_slot,
+                "student_name": "Notice Student",
+                "student_email": "student@example.com",
+            }
+        )
+
+    def test_points_booking_rejects_slot_within_24_hours(self):
+        # Tuesday 09:00 Lagos is 23 hours after the frozen now (Monday 10:00)
+        form = self._points_form([
+            {"date": "2026-01-06", "day_of_week": 2, "start_time": "09:00", "end_time": "10:00"},
+        ])
+        self.assertFalse(form.is_valid())
+        self.assertIn("24 hours", str(form.errors))
+
+    def test_points_booking_allows_slot_after_24_hours(self):
+        form = self._points_form([
+            {"date": "2026-01-06", "day_of_week": 2, "start_time": "11:00", "end_time": "12:00"},
+        ])
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_special_booking_rejects_session_within_24_hours(self):
+        form = self._special_form([
+            {"date": "2026-01-06", "day_of_week": 2, "start_time": "09:00", "end_time": "10:00"},
+        ])
+        self.assertFalse(form.is_valid())
+        self.assertIn("24 hours", str(form.errors))
+
+    def test_special_booking_allows_session_after_24_hours(self):
+        form = self._special_form([
+            {"date": "2026-01-06", "day_of_week": 2, "start_time": "11:00", "end_time": "12:00"},
+        ])
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_recurring_booking_rejects_first_session_within_24_hours(self):
+        # First occurrence of Tuesday is 2026-01-06; 09:00 is under 24h away
+        form = self._recurring_form(2, "09:00|10:00")
+        self.assertFalse(form.is_valid())
+        self.assertIn("24 hours", str(form.errors))
+
+    def test_recurring_booking_allows_first_session_after_24_hours(self):
+        form = self._recurring_form(2, "11:00|12:00")
+        self.assertTrue(form.is_valid(), form.errors)
