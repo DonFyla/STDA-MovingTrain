@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.safestring import mark_safe
-from .models import Qtaker, Question, Questionnaire, Options
+from .models import Qtaker, Question, Questionnaire, Options, QuestionResult, Badge, UserBadge
 
 
 @admin.register(Qtaker)
@@ -35,4 +35,25 @@ class QuestionAdmin(admin.ModelAdmin):
 
 @admin.register(Questionnaire)
 class QuestionnaireAdmin(admin.ModelAdmin):
-    list_display = ["title", "description", "created_at", "created_by"]
+    list_display = ["title", "motif", "difficulty", "created_at", "created_by"]
+    list_filter = ["motif", "difficulty"]
+
+
+@admin.register(QuestionResult)
+class QuestionResultAdmin(admin.ModelAdmin):
+    list_display = ["qtaker", "question", "correct", "created_at"]
+    list_filter = ["correct"]
+    readonly_fields = ["qtaker", "question", "answer_given", "correct", "created_at"]
+
+
+@admin.register(Badge)
+class BadgeAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "motif", "difficulty", "icon", "created_at"]
+    list_filter = ["motif", "difficulty"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(UserBadge)
+class UserBadgeAdmin(admin.ModelAdmin):
+    list_display = ["user", "badge", "awarded_at"]
+    list_filter = ["badge"]

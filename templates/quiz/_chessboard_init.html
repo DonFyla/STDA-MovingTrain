@@ -1,0 +1,16 @@
+{# Chessground assets + initializer for any .quiz-board element with data-fen. #}
+{# Include once per page inside {% block extra_js %}. CSS goes to extra_css.  #}
+<script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9/+esm';
+
+    document.querySelectorAll('.quiz-board').forEach(function (el) {
+        const fen = el.dataset.fen;
+        Chessground(el, {
+            fen: fen,
+            // Board faces the side to move — the student plays from that side.
+            orientation: fen.split(' ')[1] === 'b' ? 'black' : 'white',
+            viewOnly: true,
+            coordinates: true,
+        });
+    });
+</script>

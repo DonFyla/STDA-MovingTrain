@@ -159,7 +159,8 @@ def dashboard_view(request):
 
     # Student dashboard
     from scheduling.models import Booking, FlexibleBooking, SpecialBooking
-    from quiz.models import Qtaker
+    from quiz.models import Qtaker, Questionnaire, QuestionResult, Badge
+    from quiz.proficiency import get_proficiency
     from payments.points_service import get_balance
 
     bookings = Booking.objects.filter(student_email=user.email).order_by("-created_at")
@@ -204,6 +205,35 @@ def dashboard_view(request):
     upcoming_sessions.sort(key=lambda s: (s["session_date"], s["start_time"] or time.min))
 
     quiz_history = Qtaker.objects.filter(email=user.email).order_by("-date_taken")[:5]
+    for attempt in quiz_history:
+        # Motif quizzes carry the default skill, so derive the label from the
+        # questionnaire that was actually taken (via its recorded results).
+        first_result = (
+            QuestionResult.objects.filter(qtaker=attempt, question__isnull=False)
+            .select_related("question__questionnaire")
+            .first()
+        )
+        if first_result:
+            attempt.quiz_label = first_result.question.questionnaire.title
+        else:
+            attempt.quiz_label = f"{attempt.skill} level"
+
+    # Motif quizzes that actually have approved questions, grouped by motif label.
+    level_order = {"easy": 0, "medium": 1, "hard": 2}
+    motif_questionnaires = sorted(
+        Questionnaire.objects.exclude(motif="").exclude(difficulty="")
+        .filter(question__is_approved=True)
+        .distinct(),
+        key=lambda q: (q.motif, level_order.get(q.difficulty, 99)),
+    )
+    motif_quizzes = {}
+    for questionnaire in motif_questionnaires:
+        motif_quizzes.setdefault(questionnaire.get_motif_display(), []).append(questionnaire)
+
+    earned_badges = user.badges.select_related("badge").order_by("-awarded_at")
+    locked_badges = Badge.objects.exclude(
+        id__in=[award.badge_id for award in earned_badges]
+    )
 
     context = {
         "user": user,
@@ -219,6 +249,10 @@ def dashboard_view(request):
         "upcoming_sessions": upcoming_sessions,
         "user_balance": get_balance(user),
         "quiz_history": quiz_history,
+        "motif_quizzes": motif_quizzes,
+        "proficiency": get_proficiency(user),
+        "earned_badges": earned_badges,
+        "locked_badges": locked_badges,
     }
     return render(request, "accounts/dashboard_student.html", context)
 

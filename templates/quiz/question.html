@@ -10,6 +10,8 @@
             <span class="text-sm text-gray-500">Question {{ progress.current }} of {{ progress.total }}</span>
         </div>
 
+        {% include "quiz/_chessboard.html" %}
+
         <div class="mb-8">
             <h2 class="text-xl font-semibold mb-4">{{ question.question|safe }}</h2>
         </div>
@@ -42,4 +44,18 @@
         </form>
     </div>
 </section>
+{% endblock %}
+
+{% block extra_css %}
+{% if question.fen %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.base.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.brown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.cburnett.css">
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if question.fen %}
+{% include "quiz/_chessboard_init.html" %}
+{% endif %}
 {% endblock %}

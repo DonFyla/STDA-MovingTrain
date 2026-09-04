@@ -1,7 +1,8 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from .models import Questionnaire, Question, Options, Qtaker
+from .models import Questionnaire, Question, Options, Qtaker, QuestionResult, Badge, UserBadge
+from .proficiency import get_proficiency
 from .views import _build_session
 
 User = get_user_model()
@@ -532,3 +533,303 @@ class CoachQuestionSubmissionTests(TestCase):
         question.save()
         session = _build_session(qtaker, self.questionnaire)
         self.assertIn(question.id, session)
+
+
+class MotifQuizTests(TestCase):
+    """Motif-specific quiz sessions (quiz:motif_quiz)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="motifuser", password="testpass", email="motif@example.com"
+        )
+        self.pins_easy = Questionnaire.objects.create(
+            title="Pins — Easy",
+            description="Pin puzzles",
+            motif="pins",
+            difficulty="easy",
+            created_by=self.user,
+        )
+        self.pins_question = Question.objects.create(
+            questionnaire=self.pins_easy,
+            question="White to play — pins.",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+        Options.objects.create(question=self.pins_question, text="Bd5", correct=True)
+        # A question in a *different* questionnaire must never leak into the session.
+        self.other_questionnaire = Questionnaire.objects.create(
+            title="beginner", description="Legacy", created_by=self.user
+        )
+        Question.objects.create(
+            questionnaire=self.other_questionnaire,
+            question="Trivia",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+
+    def test_requires_login(self):
+        response = self.client.get(reverse("quiz:motif_quiz", args=["pins", "easy"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response.url)
+
+    def test_builds_session_from_matching_questionnaire_only(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("quiz:motif_quiz", args=["pins", "easy"]))
+        self.assertEqual(response.status_code, 302)
+        qtaker = Qtaker.objects.get(user=self.user)
+        self.assertEqual(qtaker.current_question_set, [self.pins_question.id])
+        self.assertRedirects(
+            response,
+            reverse("quiz:question", args=[qtaker.id, self.pins_question.id]),
+            fetch_redirect_response=False,
+        )
+
+    def test_question_page_works_with_non_skill_questionnaire_title(self):
+        """Regression: questionnaire titled 'Pins — Easy' must not 404 the flow."""
+        self.client.force_login(self.user)
+        self.client.get(reverse("quiz:motif_quiz", args=["pins", "easy"]))
+        qtaker = Qtaker.objects.get(user=self.user)
+        response = self.client.get(
+            reverse("quiz:question", args=[qtaker.id, self.pins_question.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "quiz/question.html")
+
+    def test_unknown_motif_redirects_with_message(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("quiz:motif_quiz", args=["forks", "hard"]))
+        self.assertRedirects(
+            response, reverse("quiz:register"), fetch_redirect_response=False
+        )
+        self.assertFalse(Qtaker.objects.filter(user=self.user).exists())
+
+    def test_questionnaire_without_approved_questions_redirects(self):
+        self.pins_question.is_approved = False
+        self.pins_question.save()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("quiz:motif_quiz", args=["pins", "easy"]))
+        self.assertRedirects(
+            response, reverse("quiz:register"), fetch_redirect_response=False
+        )
+
+
+class QuestionResultTests(TestCase):
+    """Per-question outcome recording in quiz_answer_view."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="qr", password="testpass", email="qr@example.com"
+        )
+        self.questionnaire = Questionnaire.objects.create(
+            title="beginner", description="Legacy", created_by=self.user
+        )
+        self.question = Question.objects.create(
+            questionnaire=self.questionnaire,
+            question="Most powerful piece?",
+            question_type="radio",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+        self.correct = Options.objects.create(question=self.question, text="Queen", correct=True)
+        self.wrong = Options.objects.create(question=self.question, text="Pawn", correct=False)
+
+    def _answer(self, option):
+        qtaker = Qtaker.objects.create(name="QR", email="qr@example.com", user=self.user)
+        qtaker.current_question_set = [self.question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, self.question.id]),
+            {"answer": str(option.id)},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, option.id]))
+        return qtaker
+
+    def test_correct_answer_recorded(self):
+        qtaker = self._answer(self.correct)
+        result = Qtaker.objects.get(id=qtaker.id).questionresult_set.get()
+        self.assertTrue(result.correct)
+        self.assertEqual(result.answer_given, "Queen")
+        self.assertEqual(result.question, self.question)
+
+    def test_wrong_answer_recorded_as_incorrect(self):
+        qtaker = self._answer(self.wrong)
+        result = qtaker.questionresult_set.get()
+        self.assertFalse(result.correct)
+
+    def test_revisiting_answer_page_does_not_duplicate(self):
+        qtaker = self._answer(self.correct)
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, self.correct.id]))
+        self.assertEqual(qtaker.questionresult_set.count(), 1)
+
+
+class BadgeTests(TestCase):
+    """Badge awarding on passed motif quizzes."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="badger", password="testpass", email="badger@example.com"
+        )
+        self.pins_easy = Questionnaire.objects.create(
+            title="Pins — Easy",
+            description="Pin puzzles",
+            motif="pins",
+            difficulty="easy",
+            created_by=self.user,
+        )
+        self.question = Question.objects.create(
+            questionnaire=self.pins_easy,
+            question="White to play — pins.",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+        Options.objects.create(question=self.question, text="Bd5", correct=True)
+        Options.objects.create(question=self.question, text="Bc4", correct=False)
+
+    def _complete_quiz(self, answers_correct):
+        qtaker = Qtaker.objects.create(name="Badger", email="badger@example.com", user=self.user)
+        qtaker.current_question_set = [self.question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, self.question.id]),
+            {"answer": "Bd5" if answers_correct else "wrong"},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.client.get(reverse("quiz:result", args=[qtaker.id]))
+        qtaker.refresh_from_db()
+        return qtaker
+
+    def test_passing_motif_quiz_awards_badge(self):
+        self._complete_quiz(answers_correct=True)
+        badge = Badge.objects.get(slug="motif-pins-easy")
+        self.assertEqual(badge.motif, "pins")
+        self.assertEqual(badge.difficulty, "easy")
+        self.assertTrue(
+            UserBadge.objects.filter(user=self.user, badge=badge).exists()
+        )
+
+    def test_failing_quiz_awards_no_badge(self):
+        self._complete_quiz(answers_correct=False)
+        self.assertFalse(UserBadge.objects.filter(user=self.user).exists())
+
+    def test_retake_does_not_duplicate_badge(self):
+        self._complete_quiz(answers_correct=True)
+        self._complete_quiz(answers_correct=True)
+        badge = Badge.objects.get(slug="motif-pins-easy")
+        self.assertEqual(
+            UserBadge.objects.filter(user=self.user, badge=badge).count(), 1
+        )
+
+    def test_legacy_quiz_awards_no_badge(self):
+        legacy = Questionnaire.objects.create(
+            title="beginner", description="Legacy", created_by=self.user
+        )
+        question = Question.objects.create(
+            questionnaire=legacy,
+            question="Trivia",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+        Options.objects.create(question=question, text="Yes", correct=True)
+        qtaker = Qtaker.objects.create(name="Badger", email="badger@example.com", user=self.user)
+        qtaker.current_question_set = [question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, question.id]), {"answer": "Yes"}
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.client.get(reverse("quiz:result", args=[qtaker.id]))
+        self.assertFalse(UserBadge.objects.filter(user=self.user).exists())
+
+
+class ProficiencyTests(TestCase):
+    """get_proficiency aggregation."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="prof", password="testpass", email="prof@example.com"
+        )
+
+    def _make_session(self, motif, difficulty, test_result):
+        questionnaire = Questionnaire.objects.create(
+            title=f"{motif}-{difficulty}-{test_result}",
+            description="",
+            motif=motif,
+            difficulty=difficulty,
+            created_by=self.user,
+        )
+        question = Question.objects.create(
+            questionnaire=questionnaire,
+            question="Q",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+        qtaker = Qtaker.objects.create(
+            name="Prof",
+            email="prof@example.com",
+            user=self.user,
+            test_result=test_result,
+        )
+        QuestionResult.objects.create(
+            qtaker=qtaker, question=question, correct=True, answer_given="x"
+        )
+        return qtaker
+
+    def test_new_user_has_all_motifs_at_zero(self):
+        proficiency = get_proficiency(self.user)
+        self.assertEqual(len(proficiency), len(Questionnaire.QUESTION_MOTIFS))
+        self.assertTrue(all(entry["level_value"] == 0 for entry in proficiency))
+
+    def test_passed_easy_sets_level(self):
+        self._make_session("pins", "easy", 80.0)
+        entry = next(e for e in get_proficiency(self.user) if e["motif"] == "pins")
+        self.assertEqual(entry["level"], "easy")
+        self.assertEqual(entry["level_value"], 1)
+        self.assertEqual(entry["attempts"], 1)
+        self.assertEqual(entry["best_score"], 80.0)
+
+    def test_highest_passed_difficulty_wins(self):
+        self._make_session("pins", "easy", 100.0)
+        self._make_session("pins", "hard", 70.0)
+        entry = next(e for e in get_proficiency(self.user) if e["motif"] == "pins")
+        self.assertEqual(entry["level"], "hard")
+        self.assertEqual(entry["level_value"], 3)
+
+    def test_failed_attempts_give_no_level(self):
+        self._make_session("pins", "easy", 40.0)
+        entry = next(e for e in get_proficiency(self.user) if e["motif"] == "pins")
+        self.assertIsNone(entry["level"])
+        self.assertEqual(entry["level_value"], 0)
+        self.assertEqual(entry["attempts"], 1)
+
+    def test_legacy_questionnaire_excluded(self):
+        legacy = Questionnaire.objects.create(
+            title="beginner", description="Legacy", created_by=self.user
+        )
+        question = Question.objects.create(
+            questionnaire=legacy,
+            question="Trivia",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+        )
+        qtaker = Qtaker.objects.create(
+            name="Prof", email="prof@example.com", user=self.user, test_result=100.0
+        )
+        QuestionResult.objects.create(qtaker=qtaker, question=question, correct=True)
+        proficiency = get_proficiency(self.user)
+        self.assertTrue(all(entry["attempts"] == 0 for entry in proficiency))

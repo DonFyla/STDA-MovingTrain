@@ -44,3 +44,6 @@ certbot_data/
 *.pem
 *.key
 *.crt
+
+# Lichess puzzle database download (imported via management command)
+lichess_db_puzzle.csv*

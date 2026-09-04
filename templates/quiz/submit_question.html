@@ -43,6 +43,21 @@
                         {% if form.question.errors %}<p class="mt-1 text-sm text-red-600">{{ form.question.errors|first }}</p>{% endif %}
                     </div>
 
+                    <div>
+                        <label for="{{ form.fen.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Board position (FEN, optional)</label>
+                        {{ form.fen|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        <p class="mt-1 text-xs text-brand-500">Paste a FEN string to show an interactive board with this question.</p>
+                        {% if form.fen.errors %}<p class="mt-1 text-sm text-red-600">{{ form.fen.errors|first }}</p>{% endif %}
+                        <div id="fen-preview" class="mt-3 hidden mx-auto" style="max-width: 320px; aspect-ratio: 1;"></div>
+                    </div>
+
+                    <div>
+                        <label for="{{ form.solution_uci.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Solution move (UCI, optional)</label>
+                        {{ form.solution_uci|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        <p class="mt-1 text-xs text-brand-500">E.g. <code>e2e4</code> or <code>e7e8q</code> for a promotion. Requires a FEN above.</p>
+                        {% if form.solution_uci.errors %}<p class="mt-1 text-sm text-red-600">{{ form.solution_uci.errors|first }}</p>{% endif %}
+                    </div>
+
                     <div id="radio-fields" class="space-y-4">
                         <p class="text-sm font-medium text-brand-700">Answer options</p>
                         {% for option_field in option_fields %}
@@ -78,8 +93,45 @@
 </section>
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.base.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.brown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.cburnett.css">
+{% endblock %}
+
 {% block extra_js %}
 {{ form.media }}
+<script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9/+esm';
+
+    // Live board preview for the FEN field.
+    const fenInput = document.getElementById("{{ form.fen.id_for_label }}");
+    const preview = document.getElementById("fen-preview");
+    let board = null;
+
+    function updatePreview() {
+        const fen = fenInput.value.trim();
+        if (!fen) {
+            preview.classList.add("hidden");
+            return;
+        }
+        preview.classList.remove("hidden");
+        const config = {
+            fen: fen,
+            orientation: fen.split(" ")[1] === "b" ? "black" : "white",
+            viewOnly: true,
+            coordinates: true,
+        };
+        if (board) {
+            board.set(config);
+        } else {
+            board = Chessground(preview, config);
+        }
+    }
+
+    fenInput.addEventListener("input", updatePreview);
+    updatePreview();
+</script>
 <script>
     (function () {
         var typeSelect = document.getElementById("{{ form.question_type.id_for_label }}");

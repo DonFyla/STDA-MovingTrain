@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
-from .models import Questionnaire, Question, Qtaker, Options
+from .models import Questionnaire, Question, Qtaker, Options, QuestionResult
 from .forms import CoachQuestionForm, QtakerForm, AnswerForm
 
 
@@ -81,6 +81,28 @@ def _start_quiz_for_user(request, user, skill="beginner"):
 
     return qtaker, session[0]
 
+@login_required
+def motif_quiz_view(request, motif, difficulty):
+    """Start a quiz session for a specific (motif, difficulty) pair."""
+    questionnaire = Questionnaire.objects.filter(motif=motif, difficulty=difficulty).first()
+    if questionnaire is None:
+        messages.error(request, f"No quiz found for {motif} ({difficulty}).")
+        return redirect("quiz:register")
+
+    qtaker = Qtaker.objects.create(
+        name=request.user.full_name or request.user.get_full_name() or request.user.username or request.user.email,
+        email=request.user.email,
+        user=request.user,
+    )
+    _register_quiz_attempt(request, qtaker)
+
+    session = _build_session(qtaker, questionnaire)
+    if not session:
+        messages.error(request, f"No approved questions found for {motif} ({difficulty}).")
+        return redirect("quiz:register")
+
+    return redirect("quiz:question", qtaker_id=qtaker.id, question_id=session[0])
+
 
 def qtaker_view(request):
     if request.user.is_authenticated:
@@ -127,9 +149,11 @@ def quiz_question_view(request, qtaker_id, question_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
     if not _owns_quiz_attempt(request, qtaker):
         raise PermissionDenied
-    skill = qtaker.skill
-    questionnaire = get_object_or_404(Questionnaire, title=skill)
-    question = get_object_or_404(Question, id=question_id, questionnaire=questionnaire)
+    # Derive the questionnaire from the question itself: motif quizzes keep the
+    # default skill on the qtaker, so looking up by skill title would find the
+    # wrong (legacy) questionnaire and 404.
+    question = get_object_or_404(Question, id=question_id)
+    questionnaire = question.questionnaire
 
     # Handle session transition from a previously completed questionnaire
     current_set = qtaker.current_question_set or []
@@ -233,6 +257,16 @@ def quiz_answer_view(request, qtaker_id, answer_id):
             "correct": chosen_answer_obj.correct,
         }
 
+    # Record the outcome once per question; the first attempt stands even if the
+    # student revisits or re-answers the question page.
+    if not QuestionResult.objects.filter(qtaker=qtaker, question=question).exists():
+        QuestionResult.objects.create(
+            qtaker=qtaker,
+            question=question,
+            correct=is_correct,
+            answer_given=chosen_answer["text"] or "",
+        )
+
     scored_ids = qtaker.scored_question_ids or []
     already_scored = question.id in scored_ids
 
@@ -273,13 +307,16 @@ def quiz_result_view(request, qtaker_id):
     if not _owns_quiz_attempt(request, qtaker):
         raise PermissionDenied
     original_skill = qtaker.skill
-    questionnaire = get_object_or_404(Questionnaire, title=original_skill)
 
-    total_questions = (
-        len(qtaker.current_question_set)
-        if qtaker.current_question_set
-        else Question.objects.filter(questionnaire=questionnaire, is_approved=True).count()
-    )
+    if qtaker.current_question_set:
+        total_questions = len(qtaker.current_question_set)
+    else:
+        # Legacy fallback only — motif quizzes always have a current_question_set,
+        # and their qtaker.skill is just the default, not a questionnaire title.
+        questionnaire = get_object_or_404(Questionnaire, title=original_skill)
+        total_questions = Question.objects.filter(
+            questionnaire=questionnaire, is_approved=True
+        ).count()
 
     percent = (
         (qtaker.current_score * 100 / total_questions)
@@ -323,6 +360,11 @@ def quiz_result_view(request, qtaker_id):
     qtaker.save(
         update_fields=["test_result", "current_score", "next_question_set", "current_question_set", "skill"]
     )
+
+    if passed:
+        from .badges import evaluate_badges
+        for badge in evaluate_badges(qtaker):
+            messages.success(request, f"Badge earned: {badge.icon} {badge.name}!")
 
     context = {
         "qtaker": qtaker,

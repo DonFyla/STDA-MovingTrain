@@ -21,6 +21,8 @@
             <p class="font-medium text-gray-700 mb-2">Question:</p>
             <div class="mb-4">{{ question.question|safe }}</div>
 
+            {% include "quiz/_chessboard.html" %}
+
             <p class="font-medium text-gray-700 mb-1">Your answer:</p>
             <p class="{% if is_correct %}text-green-700{% else %}text-red-700{% endif %} mb-4">{{ chosen_answer.text }}</p>
 
@@ -41,4 +43,18 @@
         {% endif %}
     </div>
 </section>
+{% endblock %}
+
+{% block extra_css %}
+{% if question.fen %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.base.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.brown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.cburnett.css">
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if question.fen %}
+{% include "quiz/_chessboard_init.html" %}
+{% endif %}
 {% endblock %}

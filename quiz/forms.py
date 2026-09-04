@@ -1,4 +1,6 @@
 from django import forms
+import chess
+
 from .models import Question, Questionnaire, Qtaker, Options
 
 
@@ -57,7 +59,16 @@ class CoachQuestionForm(forms.ModelForm):
 
     class Meta:
         model = Question
-        fields = ["questionnaire", "question_type", "question"]
+        fields = ["questionnaire", "question_type", "question", "fen", "solution_uci"]
+
+    def clean_fen(self):
+        fen = (self.cleaned_data.get("fen") or "").strip()
+        if fen:
+            try:
+                chess.Board(fen)
+            except ValueError:
+                raise forms.ValidationError("Invalid FEN string.")
+        return fen
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -70,6 +81,20 @@ class CoachQuestionForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         question_type = cleaned_data.get("question_type")
+
+        solution_uci = (cleaned_data.get("solution_uci") or "").strip()
+        if solution_uci:
+            fen = cleaned_data.get("fen") or ""
+            if not fen:
+                raise forms.ValidationError(
+                    "A solution move requires a board position (FEN)."
+                )
+            try:
+                chess.Board(fen).parse_uci(solution_uci)
+            except ValueError:
+                raise forms.ValidationError(
+                    "The solution move is not a legal move in the given position."
+                )
 
         if question_type == "radio":
             options = [
