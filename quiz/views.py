@@ -58,6 +58,17 @@ def _text_answer_is_correct(question, answer_text):
     return any(cleaned == text.strip().lower() for text in correct_texts)
 
 
+def _answer_is_correct(question, answer_text):
+    """Grade a text/board answer: exact UCI match against solution_uci when set,
+    otherwise any correct option text (covers SAN and UCI for imported puzzles)."""
+    cleaned = (answer_text or "").strip().lower()
+    if not cleaned:
+        return False
+    if question.solution_uci and cleaned == question.solution_uci.strip().lower():
+        return True
+    return _text_answer_is_correct(question, answer_text)
+
+
 def _start_quiz_for_user(request, user, skill="beginner"):
     """Create a Qtaker for an authenticated user and redirect to first question."""
     qtaker = Qtaker.objects.create(
@@ -200,7 +211,7 @@ def quiz_question_view(request, qtaker_id, question_id):
                 is_correct = chosen_opt.correct
                 stored_answer_id = chosen_opt.id
             elif question.question_type == "text":
-                is_correct = _text_answer_is_correct(question, answer_value)
+                is_correct = _answer_is_correct(question, answer_value)
                 stored_text_answer = answer_value.strip()
 
             qtaker.last_answer_id = stored_answer_id
@@ -245,7 +256,7 @@ def quiz_answer_view(request, qtaker_id, answer_id):
             return redirect("quiz:register")
         question = get_object_or_404(Question, id=qtaker.last_question_id)
         user_answer_text = qtaker.last_text_answer
-        is_correct = _text_answer_is_correct(question, user_answer_text)
+        is_correct = _answer_is_correct(question, user_answer_text)
         chosen_answer = {"id": 0, "text": user_answer_text, "correct": is_correct}
     else:
         chosen_answer_obj = get_object_or_404(Options, pk=answer_id_int)
@@ -302,6 +313,49 @@ def quiz_answer_view(request, qtaker_id, answer_id):
     return render(request, "quiz/answer.html", context)
 
 
+def _prepare_next_session(qtaker, questionnaire):
+    """Queue a questionnaire's approved questions as the qtaker's next session."""
+    all_questions = Question.objects.filter(questionnaire=questionnaire, is_approved=True)
+    if not all_questions.exists():
+        return None
+    questions_to_take = min(QUESTIONS_PER_SESSION, all_questions.count())
+    randomized = list(all_questions.order_by("?")[:questions_to_take])
+    qtaker.next_question_set = [q.id for q in randomized]
+    qtaker.current_question_set = []
+    return {
+        "id": questionnaire.id,
+        "title": questionnaire.title,
+        "first_question_id": randomized[0].id,
+    }
+
+
+def _get_session_questionnaire(qtaker):
+    """The questionnaire this session drew its questions from, if identifiable."""
+    first_result = (
+        QuestionResult.objects.filter(qtaker=qtaker, question__isnull=False)
+        .select_related("question__questionnaire")
+        .first()
+    )
+    if first_result:
+        return first_result.question.questionnaire
+    current = qtaker.current_question_set or []
+    if current:
+        question = Question.objects.filter(id=current[0]).select_related("questionnaire").first()
+        if question:
+            return question.questionnaire
+    return None
+
+
+DIFFICULTY_LADDER = ["easy", "medium", "hard"]
+
+
+def _next_difficulty(difficulty):
+    try:
+        return DIFFICULTY_LADDER[DIFFICULTY_LADDER.index(difficulty) + 1]
+    except (ValueError, IndexError):
+        return None
+
+
 def quiz_result_view(request, qtaker_id):
     qtaker = get_object_or_404(Qtaker, id=qtaker_id)
     if not _owns_quiz_attempt(request, qtaker):
@@ -325,35 +379,29 @@ def quiz_result_view(request, qtaker_id):
     )
     qtaker.test_result = percent
     passed = percent > PASS_PERCENTAGE
-    next_skill = None
     next_questionnaire_data = None
-    first_question_id = None
+    session_questionnaire = _get_session_questionnaire(qtaker)
 
     if passed:
-        next_skill = Qtaker.get_next_skill(original_skill)
-        if next_skill:
-            try:
-                next_questionnaire = Questionnaire.objects.get(title=next_skill)
-                all_questions = Question.objects.filter(questionnaire=next_questionnaire, is_approved=True)
-                if all_questions.exists():
-                    question_count = all_questions.count()
-                    questions_to_take = min(QUESTIONS_PER_SESSION, question_count)
-                    randomized_questions = list(all_questions.order_by("?")[:questions_to_take])
-                    randomized_question_ids = [q.id for q in randomized_questions]
-                    qtaker.next_question_set = randomized_question_ids
-                    qtaker.current_question_set = []
-                    first_question = randomized_questions[0] if randomized_questions else None
-                    first_question_id = first_question.id if first_question else None
-                    next_questionnaire_data = {
-                        "id": next_questionnaire.id,
-                        "title": next_questionnaire.title,
-                        "first_question_id": first_question_id,
-                    }
-            except Questionnaire.DoesNotExist:
-                pass
-
-    if passed and next_skill:
-        qtaker.skill = next_skill
+        if session_questionnaire and session_questionnaire.motif:
+            # Motif quiz: progress to the same motif at the next difficulty.
+            next_difficulty = _next_difficulty(session_questionnaire.difficulty)
+            if next_difficulty:
+                next_questionnaire = Questionnaire.objects.filter(
+                    motif=session_questionnaire.motif, difficulty=next_difficulty
+                ).first()
+                if next_questionnaire:
+                    next_questionnaire_data = _prepare_next_session(qtaker, next_questionnaire)
+        else:
+            # Legacy flow: progress through skill levels by questionnaire title.
+            next_skill = Qtaker.get_next_skill(original_skill)
+            if next_skill:
+                try:
+                    next_questionnaire = Questionnaire.objects.get(title=next_skill)
+                    next_questionnaire_data = _prepare_next_session(qtaker, next_questionnaire)
+                except Questionnaire.DoesNotExist:
+                    pass
+                qtaker.skill = next_skill
 
     score_for_template = qtaker.current_score
     qtaker.current_score = 0
@@ -373,7 +421,7 @@ def quiz_result_view(request, qtaker_id):
         "percentage": percent,
         "passed": passed,
         "next_questionnaire": next_questionnaire_data,
-        "course_slug": qtaker.skill,
+        "course_slug": None if (session_questionnaire and session_questionnaire.motif) else qtaker.skill,
         "quiz_url": request.build_absolute_uri(reverse("quiz:register")),
         "result_share_text": f"I scored {percent:.0f}% on the Moving Train Chess Quiz! Can you beat me?",
     }

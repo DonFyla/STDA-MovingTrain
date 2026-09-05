@@ -28,10 +28,18 @@
                     {% endfor %}
                 </div>
             {% else %}
+                {% if question.fen and question.solution_uci %}
+                    <input type="hidden" name="answer" id="id_answer">
+                    <div class="flex items-center justify-between">
+                        <p id="board-status" class="text-sm text-gray-500">Play your move on the board, then submit.</p>
+                        <button type="button" id="board-reset" class="text-sm text-[#5E5044] underline">Reset board</button>
+                    </div>
+                {% else %}
                 <div>
                     <label for="{{ form.answer.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">Your answer</label>
                     {{ form.answer }}
                 </div>
+                {% endif %}
             {% endif %}
 
             {% if form.answer.errors %}
@@ -56,6 +64,10 @@
 
 {% block extra_js %}
 {% if question.fen %}
+{% if question.solution_uci %}
+{% include "quiz/_chessboard_interactive.html" %}
+{% else %}
 {% include "quiz/_chessboard_init.html" %}
+{% endif %}
 {% endif %}
 {% endblock %}

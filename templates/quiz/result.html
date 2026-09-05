@@ -31,9 +31,11 @@
                     Try {{ next_questionnaire.title|title }} Level
                 </a>
             {% endif %}
+            {% if course_slug %}
             <a href="{% url 'course_detail' course_slug %}" class="px-6 py-3 bg-amber-600 text-white rounded-full hover:bg-amber-700 transition-colors font-medium">
                 View {{ course_slug|title }} Course
             </a>
+            {% endif %}
         </div>
 
         <div class="border-t pt-6">

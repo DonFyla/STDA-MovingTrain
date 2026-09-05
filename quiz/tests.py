@@ -833,3 +833,119 @@ class ProficiencyTests(TestCase):
         QuestionResult.objects.create(qtaker=qtaker, question=question, correct=True)
         proficiency = get_proficiency(self.user)
         self.assertTrue(all(entry["attempts"] == 0 for entry in proficiency))
+
+
+class BoardGradingTests(TestCase):
+    """Interactive board answers graded against Question.solution_uci."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="board", password="testpass", email="board@example.com"
+        )
+        self.questionnaire = Questionnaire.objects.create(
+            title="Mate in 1 — Easy",
+            description="",
+            motif="mate_in_1",
+            difficulty="easy",
+            created_by=self.user,
+        )
+        # Back-rank mate: Ra8#. Deliberately NO Options rows — grading must
+        # come from solution_uci alone.
+        self.question = Question.objects.create(
+            questionnaire=self.questionnaire,
+            question="White to play — mate in 1.",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+            fen="6k1/5ppp/8/8/8/8/8/R6K w - - 0 1",
+            solution_uci="a1a8",
+        )
+
+    def _play(self, move):
+        qtaker = Qtaker.objects.create(name="B", email="board@example.com", user=self.user)
+        qtaker.current_question_set = [self.question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, self.question.id]),
+            {"answer": move},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        qtaker.refresh_from_db()
+        return qtaker
+
+    def test_correct_uci_move_scores(self):
+        qtaker = self._play("a1a8")
+        self.assertEqual(qtaker.current_score, 1)
+        self.assertTrue(qtaker.questionresult_set.get().correct)
+
+    def test_wrong_move_does_not_score(self):
+        qtaker = self._play("a1a7")
+        self.assertEqual(qtaker.current_score, 0)
+        self.assertFalse(qtaker.questionresult_set.get().correct)
+
+    def test_move_is_case_insensitive_and_trimmed(self):
+        qtaker = self._play("  A1A8 ")
+        self.assertEqual(qtaker.current_score, 1)
+
+
+class MotifProgressionTests(TestCase):
+    """Passing a motif quiz should offer the same motif at the next difficulty,
+    without touching qtaker.skill (legacy skill progression stays legacy)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="prog", password="testpass", email="prog@example.com"
+        )
+        self.pins_easy = Questionnaire.objects.create(
+            title="Pins — Easy", description="", motif="pins",
+            difficulty="easy", created_by=self.user,
+        )
+        self.easy_question = Question.objects.create(
+            questionnaire=self.pins_easy, question="Easy pin", question_type="text",
+            placement=1, created_by=self.user, is_approved=True,
+        )
+        Options.objects.create(question=self.easy_question, text="Bd5", correct=True)
+        self.pins_medium = Questionnaire.objects.create(
+            title="Pins — Medium", description="", motif="pins",
+            difficulty="medium", created_by=self.user,
+        )
+        self.medium_question = Question.objects.create(
+            questionnaire=self.pins_medium, question="Medium pin", question_type="text",
+            placement=1, created_by=self.user, is_approved=True,
+        )
+        Options.objects.create(question=self.medium_question, text="Qd1", correct=True)
+
+    def _pass_quiz(self, questionnaire, question):
+        qtaker = Qtaker.objects.create(name="P", email="prog@example.com", user=self.user)
+        qtaker.current_question_set = [question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, question.id]),
+            {"answer": Options.objects.get(question=question, correct=True).text},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.client.get(reverse("quiz:result", args=[qtaker.id]))
+        qtaker.refresh_from_db()
+        return qtaker
+
+    def test_passing_easy_offers_medium_same_motif(self):
+        qtaker = self._pass_quiz(self.pins_easy, self.easy_question)
+        self.assertEqual(qtaker.next_question_set, [self.medium_question.id])
+        self.assertEqual(qtaker.current_question_set, [])
+        self.assertEqual(qtaker.skill, "beginner")  # untouched by motif progression
+
+    def test_passing_hard_offers_nothing(self):
+        pins_hard = Questionnaire.objects.create(
+            title="Pins — Hard", description="", motif="pins",
+            difficulty="hard", created_by=self.user,
+        )
+        hard_question = Question.objects.create(
+            questionnaire=pins_hard, question="Hard pin", question_type="text",
+            placement=1, created_by=self.user, is_approved=True,
+        )
+        Options.objects.create(question=hard_question, text="Rh8", correct=True)
+        qtaker = self._pass_quiz(pins_hard, hard_question)
+        self.assertEqual(qtaker.next_question_set, [])

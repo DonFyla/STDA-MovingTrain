@@ -127,10 +127,10 @@ Written in `quiz_answer_view` where scoring already happens (once per question v
 `exists()` guard; first attempt stands). This makes motif stats
 **survive score resets** and enables per-question analytics later.
 
-**Known quirk (deferred):** on a pass, `quiz_result_view` still runs the legacy
-skill progression (looks up the next *skill-title* questionnaire, mutates `qtaker.skill`).
-For motif quizzes that's meaningless — real progression is easy→medium→hard within the
-motif. To be designed with Phase 3/4.
+**Progression (resolved 2026-08-27):** motif quizzes progress easy→medium→hard within
+the same motif (`_next_difficulty` + `_prepare_next_session` in `quiz/views.py`);
+`qtaker.skill` is untouched by motif quizzes, and the legacy skill-title progression only
+runs for legacy sessions. The "View course" button is hidden for motif results.
 
 ### 3.5 Proficiency computation (the chart data)
 
@@ -290,13 +290,17 @@ Do them in order; each phase leaves the site working.
 - **Verify:** run with a small `--limit`; questions appear in admin with correct
   motif/grade/fen; re-running doesn't duplicate.
 
-### Phase 7 — Interactive move grading (follow-up, optional)
+### Phase 7 — Interactive move grading (✅ single-move implemented 2026-08-27)
 
-- Play-the-move-on-the-board answers graded against `solution_uci`; multi-move puzzles
-  ("mate in 2") need server-side reply state on `Qtaker` (JSONField, same pattern as
-  `current_question_set`).
-- Only start after Phase 5 is solid. This changes the POST contract in
-  `quiz_question_view` — the riskiest change; extend tests first.
+- ✅ Students play the move on the board (Chessground + chess.js legal-move dests,
+  `templates/quiz/_chessboard_interactive.html`); the move is written as UCI into the
+  hidden `answer` field, so the POST contract of `quiz_question_view` is unchanged.
+- ✅ Grading via `_answer_is_correct` (`quiz/views.py`): exact UCI match against
+  `solution_uci`, falling back to option-text matching (SAN for imported puzzles).
+- Caveats: single-move puzzles only; promotion defaults to queen; board locks after a
+  move until "Reset board" is used.
+- **Still deferred:** multi-move puzzles ("mate in 2") need server-side reply state on
+  `Qtaker` (JSONField, same pattern as `current_question_set`) — design when needed.
 
 ---
 
