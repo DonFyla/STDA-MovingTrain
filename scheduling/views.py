@@ -9,14 +9,33 @@ from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.db import transaction
 from django.utils import timezone
-from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking
-from .forms import BookingForm, CoachProfileForm, AvailabilitySlotForm, CoachBlockedDateForm, PointsBookingForm, SpecialBookingForm
+from django.contrib.auth import get_user_model
+from django.db.models import Q, Count, Max
+from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking, Booking, FlexibleBooking, SessionNote
+from .forms import (
+    BookingForm,
+    CoachProfileForm,
+    AvailabilitySlotForm,
+    BulkAvailabilityForm,
+    CoachBlockedDateForm,
+    PointsBookingForm,
+    SpecialBookingForm,
+    SessionNoteForm,
+)
 from .emails import (
     send_recurring_booking_created,
+    send_recurring_booking_confirmed,
+    send_recurring_booking_cancelled,
     send_flexible_booking_created,
     send_special_booking_created,
 )
-from payments.paystack_service import generate_reference, initialize_transaction
+from payments.flutterwave_service import (
+    generate_reference,
+    initialize_transaction,
+    create_payment_plan,
+    cancel_subscription,
+    cancel_payment_plan,
+)
 
 
 DAY_ORDER = [
@@ -28,6 +47,38 @@ DAY_ORDER = [
     "Friday",
     "Saturday",
 ]
+
+
+def _generate_availability_slots(coach, day_of_week, start_time, end_time, duration_minutes):
+    """Create consecutive availability slots for a coach within a time range."""
+    created = 0
+    skipped = 0
+    current = datetime.combine(date.min, start_time)
+    end = datetime.combine(date.min, end_time)
+    step = timedelta(minutes=duration_minutes)
+
+    while current + step <= end:
+        slot_start = current.time()
+        slot_end = (current + step).time()
+        exists = AvailabilitySlot.objects.filter(
+            coach=coach,
+            day_of_week=day_of_week,
+            start_time=slot_start,
+            end_time=slot_end,
+        ).exists()
+        if exists:
+            skipped += 1
+        else:
+            AvailabilitySlot.objects.create(
+                coach=coach,
+                day_of_week=day_of_week,
+                start_time=slot_start,
+                end_time=slot_end,
+            )
+            created += 1
+        current += step
+
+    return created, skipped
 
 
 def _parse_session_date(value):
@@ -96,14 +147,43 @@ def coach_dashboard_view(request):
             return redirect("scheduling:coach_dashboard")
 
         elif action == "add_availability":
-            form = AvailabilitySlotForm(request.POST)
+            form = BulkAvailabilityForm(request.POST)
             if form.is_valid():
-                slot = form.save(commit=False)
-                slot.coach = coach
-                slot.save()
-                messages.success(request, "Availability slot added.")
+                day = int(form.cleaned_data["day_of_week"])
+                start = form.cleaned_data["start_time"]
+                end = form.cleaned_data["end_time"]
+                duration = int(form.cleaned_data["slot_duration"])
+                split = form.cleaned_data["split_into_slots"]
+
+                if split:
+                    created, skipped = _generate_availability_slots(
+                        coach, day, start, end, duration
+                    )
+                    msg = f"Added {created} availability slot{'' if created == 1 else 's'}."
+                    if skipped:
+                        msg += (
+                            f" {skipped} duplicate slot{'' if skipped == 1 else 's'} skipped."
+                        )
+                    messages.success(request, msg)
+                else:
+                    exists = AvailabilitySlot.objects.filter(
+                        coach=coach,
+                        day_of_week=day,
+                        start_time=start,
+                        end_time=end,
+                    ).exists()
+                    if exists:
+                        messages.warning(request, "That exact availability slot already exists.")
+                    else:
+                        AvailabilitySlot.objects.create(
+                            coach=coach,
+                            day_of_week=day,
+                            start_time=start,
+                            end_time=end,
+                        )
+                        messages.success(request, "Availability slot added.")
             else:
-                messages.error(request, "Could not add availability slot.")
+                messages.error(request, "Could not add availability. Please correct the errors below.")
             return redirect("scheduling:coach_dashboard")
 
         elif action == "delete_availability":
@@ -151,7 +231,7 @@ def coach_dashboard_view(request):
             return redirect("scheduling:coach_dashboard")
 
     profile_form = CoachProfileForm(instance=coach)
-    availability_form = AvailabilitySlotForm()
+    availability_form = BulkAvailabilityForm()
     blocked_date_form = CoachBlockedDateForm()
 
     availability_slots = coach.availability_slots.order_by("day_of_week", "start_time")
@@ -282,37 +362,62 @@ def book_coach_view(request, coach_id):
             if recurring_form.is_valid():
                 booking = recurring_form.save(coach=coach)
 
-                # Initialize Paystack payment for the recurring booking
-                payment_reference = generate_reference(prefix="BK")
-                amount_kobo = int(booking.monthly_amount * 100)
-                callback_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+                # Create a Flutterwave payment plan for the recurring subscription
+                plan_result = create_payment_plan(
+                    amount=int(booking.monthly_amount),
+                    name=f"Recurring booking {booking.id} — {booking.coach.name}",
+                    interval="monthly",
+                )
 
-                booking.payment_reference = payment_reference
+                if not plan_result["success"]:
+                    messages.error(
+                        request,
+                        f"Booking saved, but we could not create a payment plan: {plan_result['message']}. Please retry from your dashboard."
+                    )
+                    return render(request, "scheduling/booking_payment.html", {
+                        "booking": booking,
+                        "flutterwave_error": plan_result["message"],
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
+                    })
+
+                booking.flutterwave_payment_plan_id = str(plan_result["plan_id"])
+                booking.payment_reference = generate_reference(prefix="BK")
                 booking.payment_amount = booking.monthly_amount
                 booking.payment_status = "pending"
-                booking.save(update_fields=["payment_reference", "payment_amount", "payment_status"])
+                booking.save(
+                    update_fields=[
+                        "flutterwave_payment_plan_id",
+                        "payment_reference",
+                        "payment_amount",
+                        "payment_status",
+                    ]
+                )
 
+                redirect_url = request.build_absolute_uri(reverse("payments:booking_callback"))
                 send_recurring_booking_created(booking)
 
                 result = initialize_transaction(
                     email=booking.student_email,
-                    amount_kobo=amount_kobo,
-                    reference=payment_reference,
-                    callback_url=callback_url,
+                    amount=int(booking.monthly_amount),
+                    reference=booking.payment_reference,
+                    redirect_url=redirect_url,
+                    payment_plan=plan_result["plan_id"],
                     metadata={
                         "booking_id": str(booking.id),
-                        "type": "recurring_booking",
+                        "type": "recurring_booking_subscription",
                         "coach_id": str(coach.id),
                         "amount": str(booking.monthly_amount),
+                        "payment_plan_id": str(plan_result["plan_id"]),
                     },
                 )
 
                 if result["success"]:
                     return render(request, "scheduling/booking_payment.html", {
                         "booking": booking,
-                        "payment_reference": payment_reference,
+                        "payment_reference": booking.payment_reference,
                         "authorization_url": result["authorization_url"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
+                        "is_subscription": True,
                     })
                 else:
                     messages.error(
@@ -321,9 +426,9 @@ def book_coach_view(request, coach_id):
                     )
                     return render(request, "scheduling/booking_payment.html", {
                         "booking": booking,
-                        "payment_reference": payment_reference,
-                        "paystack_error": result["message"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "payment_reference": booking.payment_reference,
+                        "flutterwave_error": result["message"],
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
             else:
                 messages.error(request, "Please correct the errors below.")
@@ -377,15 +482,14 @@ def book_coach_view(request, coach_id):
 
                 send_special_booking_created(special_booking)
 
-                # Initialize Paystack payment for the special booking
-                amount_kobo = int(total_amount * 100)
-                callback_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
+                # Initialize Flutterwave payment for the special booking
+                redirect_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
 
                 result = initialize_transaction(
                     email=special_booking.student_email,
-                    amount_kobo=amount_kobo,
+                    amount=total_amount,
                     reference=payment_reference,
-                    callback_url=callback_url,
+                    redirect_url=redirect_url,
                     metadata={
                         "booking_id": str(special_booking.id),
                         "type": "special_booking",
@@ -399,7 +503,7 @@ def book_coach_view(request, coach_id):
                         "booking": special_booking,
                         "payment_reference": payment_reference,
                         "authorization_url": result["authorization_url"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
                 else:
                     messages.error(
@@ -409,8 +513,8 @@ def book_coach_view(request, coach_id):
                     return render(request, "scheduling/special_booking_payment.html", {
                         "booking": special_booking,
                         "payment_reference": payment_reference,
-                        "paystack_error": result["message"],
-                        "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+                        "flutterwave_error": result["message"],
+                        "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
                     })
             else:
                 messages.error(request, "Please correct the errors below.")
@@ -503,7 +607,7 @@ def book_coach_view(request, coach_id):
 @login_required
 def retry_booking_payment_view(request, booking_id):
     from scheduling.models import Booking
-    from payments.paystack_service import initialize_transaction
+    from payments.flutterwave_service import initialize_transaction
 
     booking = get_object_or_404(Booking, id=booking_id, student_email=request.user.email)
 
@@ -515,15 +619,16 @@ def retry_booking_payment_view(request, booking_id):
         booking.payment_reference = generate_reference(prefix="BK")
         booking.save(update_fields=["payment_reference"])
 
-    callback_url = request.build_absolute_uri(reverse("payments:booking_callback"))
+    redirect_url = request.build_absolute_uri(reverse("payments:booking_callback"))
     result = initialize_transaction(
         email=booking.student_email,
-        amount_kobo=int(booking.monthly_amount * 100),
+        amount=int(booking.monthly_amount),
         reference=booking.payment_reference,
-        callback_url=callback_url,
+        redirect_url=redirect_url,
+        payment_plan=booking.flutterwave_payment_plan_id or None,
         metadata={
             "booking_id": str(booking.id),
-            "type": "recurring_booking",
+            "type": "recurring_booking_subscription" if booking.flutterwave_payment_plan_id else "recurring_booking",
             "coach_id": str(booking.coach.id),
             "amount": str(booking.monthly_amount),
         },
@@ -534,7 +639,8 @@ def retry_booking_payment_view(request, booking_id):
             "booking": booking,
             "payment_reference": booking.payment_reference,
             "authorization_url": result["authorization_url"],
-            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+            "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
+            "is_subscription": bool(booking.flutterwave_payment_plan_id),
         })
     else:
         messages.error(request, f"Could not start payment: {result['message']}")
@@ -544,7 +650,7 @@ def retry_booking_payment_view(request, booking_id):
 @login_required
 def retry_special_payment_view(request, booking_id):
     from scheduling.models import SpecialBooking
-    from payments.paystack_service import initialize_transaction
+    from payments.flutterwave_service import initialize_transaction
 
     booking = get_object_or_404(
         SpecialBooking,
@@ -560,12 +666,12 @@ def retry_special_payment_view(request, booking_id):
         booking.payment_reference = generate_reference(prefix="SP")
         booking.save(update_fields=["payment_reference"])
 
-    callback_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
+    redirect_url = request.build_absolute_uri(reverse("payments:special_booking_callback"))
     result = initialize_transaction(
         email=booking.student_email,
-        amount_kobo=int(booking.total_amount * 100),
+        amount=booking.total_amount,
         reference=booking.payment_reference,
-        callback_url=callback_url,
+        redirect_url=redirect_url,
         metadata={
             "booking_id": str(booking.id),
             "type": "special_booking",
@@ -579,11 +685,51 @@ def retry_special_payment_view(request, booking_id):
             "booking": booking,
             "payment_reference": booking.payment_reference,
             "authorization_url": result["authorization_url"],
-            "paystack_public_key": settings.PAYSTACK_PUBLIC_KEY,
+            "flutterwave_public_key": settings.FLUTTERWAVE_PUBLIC_KEY,
         })
     else:
         messages.error(request, f"Could not start payment: {result['message']}")
         return redirect("accounts:dashboard")
+
+
+@login_required
+def cancel_subscription_view(request, booking_id):
+    """Allow a student or superuser to cancel a recurring booking subscription."""
+    from .models import Booking
+
+    booking = get_object_or_404(
+        Booking,
+        id=booking_id,
+        flutterwave_payment_plan_id__isnull=False,
+    )
+
+    if not (request.user.is_superuser or booking.student_email == request.user.email):
+        raise PermissionDenied
+
+    if booking.subscription_status == "cancelled":
+        messages.info(request, "This subscription is already cancelled.")
+        return redirect("accounts:dashboard")
+
+    # Prefer cancelling the individual subscription if it exists.
+    # Otherwise cancel the whole payment plan (one plan per booking).
+    if booking.flutterwave_subscription_id:
+        result = cancel_subscription(booking.flutterwave_subscription_id)
+    else:
+        result = cancel_payment_plan(booking.flutterwave_payment_plan_id)
+
+    if result["success"]:
+        booking.subscription_status = "cancelled"
+        booking.status = "cancelled"
+        booking.save(update_fields=["subscription_status", "status"])
+        send_recurring_booking_cancelled(booking)
+        messages.success(request, "Your subscription has been cancelled.")
+    else:
+        messages.error(
+            request,
+            f"Could not cancel subscription automatically: {result['message']}. Please contact support."
+        )
+
+    return redirect("accounts:dashboard")
 
 
 @login_required
@@ -623,3 +769,84 @@ def special_booking_confirmation_view(request, booking_id):
     ):
         raise PermissionDenied
     return render(request, "scheduling/special_booking_confirmation.html", {"booking": booking})
+
+
+def _coached_students(q=""):
+    """Students a coach may write notes about: any user linked to a coach via
+    session notes or any booking channel (Booking by email, FlexibleBooking /
+    SpecialBooking by FK). Distinct, annotated with note stats, searchable."""
+    User = get_user_model()
+    users = User.objects.filter(
+        Q(session_notes__isnull=False)
+        | Q(flexible_bookings__isnull=False)
+        | Q(special_bookings__isnull=False)
+        | Q(email__in=Booking.objects.values_list("student_email", flat=True))
+    ).distinct().annotate(
+        notes_count=Count("session_notes", distinct=True),
+        last_note_date=Max("session_notes__session_date"),
+    ).order_by("username")
+    if q:
+        users = users.filter(
+            Q(username__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(full_name__icontains=q)
+            | Q(email__icontains=q)
+        )
+    return users
+
+
+@login_required
+def student_notes_view(request):
+    """Coach-only list of students with note history / booking linkage."""
+    if not request.user.is_coach:
+        messages.error(request, "Only coach accounts can access student notes.")
+        return redirect("accounts:dashboard")
+    q = request.GET.get("q", "").strip()
+    return render(
+        request,
+        "scheduling/student_notes.html",
+        {"students": _coached_students(q), "q": q},
+    )
+
+
+@login_required
+def student_note_detail_view(request, user_id):
+    """Coach-only view of one student's full note history + proficiency chart,
+    with a form to append a new note. Append-and-keep: existing notes are
+    never edited or deleted, so a new coach taking the student sees
+    everything the previous coaches taught (design doc §6.1)."""
+    if not request.user.is_coach:
+        messages.error(request, "Only coach accounts can access student notes.")
+        return redirect("accounts:dashboard")
+    student = get_object_or_404(get_user_model(), pk=user_id)
+    try:
+        coach_profile = request.user.coach_profile
+    except Coach.DoesNotExist:
+        messages.error(request, "Your account has no coach profile.")
+        return redirect("scheduling:coach_dashboard")
+
+    if request.method == "POST":
+        form = SessionNoteForm(request.POST)
+        if form.is_valid():
+            note = form.save(commit=False)
+            note.coach = coach_profile
+            note.student = student
+            note.save()
+            messages.success(request, "Session note added.")
+            return redirect("scheduling:student_note_detail", user_id=student.id)
+    else:
+        form = SessionNoteForm()
+
+    from quiz.proficiency import get_proficiency  # local: quiz imports this module's app
+
+    return render(
+        request,
+        "scheduling/student_note_detail.html",
+        {
+            "student": student,
+            "notes": student.session_notes.select_related("coach"),
+            "form": form,
+            "proficiency": get_proficiency(student),
+        },
+    )

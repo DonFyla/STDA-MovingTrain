@@ -25,11 +25,11 @@
             </div>
         </div>
 
-        {% if paystack_error %}
+        {% if flutterwave_error %}
             <div class="max-w-2xl mx-auto bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
                 <div class="flex items-start gap-3">
                     <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <p class="text-red-700">{{ paystack_error }}</p>
+                    <p class="text-red-700">{{ flutterwave_error }}</p>
                 </div>
             </div>
         {% endif %}
@@ -51,7 +51,7 @@
         </div>
 
         {% if selected_package and payment_reference and authorization_url %}
-            <!-- Paystack Payment -->
+            <!-- Flutterwave Payment -->
             <div class="max-w-2xl mx-auto">
                 <div class="bg-white rounded-2xl shadow-sm border-2 border-brand-600 overflow-hidden">
                     <div class="bg-brand-600 text-white px-6 py-4">
@@ -70,14 +70,14 @@
                             </div>
                         </div>
 
-                        <div id="paystack-redirect" class="text-center py-4">
-                            <p class="text-brand-600 mb-3">Redirecting you to Paystack's secure checkout...</p>
+                        <div id="flutterwave-redirect" class="text-center py-4">
+                            <p class="text-brand-600 mb-3">Redirecting you to Flutterwave's secure checkout...</p>
                             <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto"></div>
                         </div>
 
-                        <a id="paystack-pay-btn" href="{{ authorization_url }}" class="hidden flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold transition-colors">
+                        <a id="flutterwave-pay-btn" href="{{ authorization_url }}" class="hidden flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold transition-colors">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 1 1 0 012 0z"></path></svg>
-                            Pay with Paystack
+                            Pay with Flutterwave
                         </a>
 
                         <p class="text-xs text-brand-500 text-center">If you are not redirected automatically, click the button above.</p>
@@ -90,8 +90,8 @@
                                         window.location.href = url;
                                     }, 1500);
                                 } else {
-                                    document.getElementById('paystack-redirect').classList.add('hidden');
-                                    document.getElementById('paystack-pay-btn').classList.remove('hidden');
+                                    document.getElementById('flutterwave-redirect').classList.add('hidden');
+                                    document.getElementById('flutterwave-pay-btn').classList.remove('hidden');
                                 }
                             })();
                         </script>

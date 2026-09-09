@@ -5,7 +5,16 @@
 {% block title %}Dashboard - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
+<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14"
+         data-guide-page="dashboard"
+         data-user-balance="{{ user_balance }}"
+         data-upcoming-count="{{ upcoming_sessions|length }}"
+         data-tutors-url="{% url 'tutors' %}"
+         data-tour-tutors-url="{% url 'tutors' %}"
+         data-buy-points-url="{% url 'payments:buy_points' %}"
+         data-quiz-url="{% url 'quiz:register' %}"
+         data-tour-seen="{{ user.student_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -13,16 +22,71 @@
                 <h1 class="text-2xl lg:text-3xl font-bold text-brand-900">Welcome back, {{ user.full_name|default:user.email }}!</h1>
                 <p class="text-brand-600 mt-1">Manage your classes, points, and progress.</p>
             </div>
-            <a href="{% url 'tutors' %}" class="btn-primary inline-flex items-center justify-center self-start">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                Book a Session
+            <div class="flex items-center gap-3 self-start">
+                {% if BLOG_ALLOW_STUDENT_POSTS %}
+                    <a href="{% url 'blog:my_posts' %}" class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-brand-700 bg-white rounded-full border border-brand-200 hover:bg-brand-50 transition-colors">
+                        My Blog Posts
+                    </a>
+                {% endif %}
+                <a href="{% url 'tutors' %}" class="btn-primary inline-flex items-center justify-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    Book a Session
+                </a>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" data-guide-quick-actions data-tour="quick-actions">
+            <a href="{% url 'tutors' %}" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center group-hover:bg-brand-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Book a class</p>
+                        <p class="text-xs text-brand-500">Single or monthly</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'payments:buy_points' %}" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Buy points</p>
+                        <p class="text-xs text-brand-500">Top up your balance</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'quiz:register' %}" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Take quiz</p>
+                        <p class="text-xs text-brand-500">Find your level</p>
+                    </div>
+                </div>
+            </a>
+            <a href="https://wa.link/uj48gk" target="_blank" rel="noopener noreferrer" class="card p-5 hover:shadow-md transition-shadow group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.42c1.45.79 3.08 1.21 4.76 1.21h.03c5.46 0 9.91-4.45 9.91-9.91S17.51 2 12.04 2zm5.54 14.23c-.24.67-1.35 1.27-1.89 1.35-.5.07-1.02.1-1.54-.03-.36-.09-.81-.23-1.38-.45-2.42-1.01-4-3.53-4.12-3.69-.12-.16-.99-1.31-.99-2.5 0-1.19.62-1.77.85-2.01.23-.24.52-.3.69-.3h.5c.16 0 .37-.06.57.43.21.52.74 1.8.81 1.93.07.13.12.28.02.45-.1.17-.15.27-.3.42-.15.15-.31.31-.44.42-.14.12-.28.25-.12.49.16.24.74 1.22 1.58 1.97 1.09.97 2.01 1.28 2.3 1.42.29.14.46.12.63-.07.17-.19.72-.84.91-1.13.19-.29.38-.24.63-.14.26.1 1.65.78 1.94.92.29.14.48.21.55.33.07.12.07.67-.17 1.34z"/></svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-brand-900 text-sm">Get help</p>
+                        <p class="text-xs text-brand-500">Chat on WhatsApp</p>
+                    </div>
+                </div>
             </a>
         </div>
 
         <!-- Stats Row -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             <!-- Points Balance -->
-            <div class="bg-gradient-to-br from-[#1a1613] to-[#2e2620] rounded-2xl p-5 text-white shadow-md">
+            <div data-tour="points-balance" class="bg-gradient-to-br from-[#1a1613] to-[#2e2620] rounded-2xl p-5 text-white shadow-md">
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-white/90 text-sm font-medium mb-1">Points Balance</p>
@@ -68,7 +132,7 @@
         </div>
 
         <!-- Upcoming Sessions (combined) -->
-        <div class="mb-8">
+        <div class="mb-8" id="upcoming-sessions">
             <h2 class="text-xl font-bold text-brand-900 mb-4">Upcoming Sessions</h2>
             {% if upcoming_sessions %}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -111,7 +175,7 @@
 
         <!-- Monthly Bookings -->
         {% if bookings %}
-            <div class="mb-8">
+            <div class="mb-8" data-tour="monthly-bookings">
                 <h2 class="text-xl font-bold text-brand-900 mb-4">Monthly Bookings</h2>
                 <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
                     <div class="divide-y divide-brand-100">
@@ -139,6 +203,14 @@
                                         <a href="{% url 'scheduling:retry_booking_payment' booking.id %}" class="text-sm font-medium text-brand-700 hover:text-brand-900 underline">
                                             Pay Now
                                         </a>
+                                    {% endif %}
+                                    {% if booking.flutterwave_payment_plan_id and booking.subscription_status == 'active' %}
+                                        <form method="post" action="{% url 'scheduling:cancel_subscription' booking.id %}" onsubmit="return confirm('Are you sure you want to cancel this monthly subscription?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-800 underline">
+                                                Cancel Subscription
+                                            </button>
+                                        </form>
                                     {% endif %}
                                 </div>
                             </div>
@@ -225,6 +297,42 @@
 
         <!-- Bottom Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Chess Proficiency (full row) -->
+            <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden lg:col-span-2">
+                <div class="px-5 py-4 border-b border-brand-100">
+                    <h2 class="font-bold text-brand-900">Chess Proficiency</h2>
+                    <p class="text-sm text-brand-500 mt-0.5">Highest level passed per motif — hover a bar for details.</p>
+                </div>
+                <div class="p-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2">
+                        {% include "quiz/_proficiency_chart.html" %}
+                    </div>
+                    {% if motif_quizzes %}
+                        <div class="border-t border-brand-100 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+                            <p class="text-xs text-brand-500 uppercase tracking-wider mb-3">Take a motif quiz</p>
+                            <div class="space-y-2">
+                                {% for label, quizzes in motif_quizzes.items %}
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-sm font-medium text-brand-900">{{ label }}</span>
+                                        <span class="flex gap-1.5">
+                                            {% for questionnaire in quizzes %}
+                                                <a href="{% url 'quiz:motif_quiz' motif=questionnaire.motif difficulty=questionnaire.difficulty %}"
+                                                   class="text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors
+                                                          {% if questionnaire.difficulty == 'easy' %}bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white
+                                                          {% elif questionnaire.difficulty == 'medium' %}bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white
+                                                          {% else %}bg-red-50 border-red-200 text-red-700 hover:bg-red-600 hover:text-white{% endif %}">
+                                                    {{ questionnaire.get_difficulty_display }}
+                                                </a>
+                                            {% endfor %}
+                                        </span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
             <!-- Quiz History -->
             <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
                 <div class="px-5 py-4 border-b border-brand-100 flex items-center justify-between">
@@ -233,16 +341,18 @@
                 </div>
                 <div class="p-5">
                     {% if quiz_history %}
-                        <ul class="space-y-4">
+                        <ul class="divide-y divide-brand-50">
                             {% for qtaker in quiz_history %}
-                                <li class="flex items-center justify-between">
+                                <li class="flex items-center justify-between py-3 first:pt-0 last:pb-0">
                                     <div>
-                                        <p class="font-medium text-brand-900 capitalize">{{ qtaker.skill }} Level</p>
+                                        <p class="font-medium text-brand-900 capitalize">{{ qtaker.quiz_label }}</p>
                                         <p class="text-sm text-brand-500">{{ qtaker.date_taken|date:"M j, Y" }}</p>
                                     </div>
-                                    <div class="text-right">
-                                        <p class="font-bold text-brand-900">{{ qtaker.test_result|default:"0"|floatformat:0 }}%</p>
-                                    </div>
+                                    {% with score=qtaker.test_result|default:0 %}
+                                        <span class="text-sm font-bold px-2.5 py-1 rounded-full {% if score > 60 %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-600{% endif %}">
+                                            {{ score|floatformat:0 }}%
+                                        </span>
+                                    {% endwith %}
                                 </li>
                             {% endfor %}
                         </ul>
@@ -255,12 +365,40 @@
                 </div>
             </div>
 
-            <!-- Account Info -->
+            <!-- Badges -->
             <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
                 <div class="px-5 py-4 border-b border-brand-100">
-                    <h2 class="font-bold text-brand-900">Account Information</h2>
+                    <h2 class="font-bold text-brand-900">Badges</h2>
                 </div>
-                <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div class="p-5">
+                    {% if earned_badges or locked_badges %}
+                        <div class="flex flex-wrap gap-4">
+                            {% for award in earned_badges %}
+                                <div class="flex flex-col items-center text-center w-24" title="{{ award.badge.description }} — earned {{ award.awarded_at|date:'M j, Y' }}">
+                                    <span class="w-14 h-14 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-2xl shadow-sm">{{ award.badge.icon }}</span>
+                                    <span class="text-xs font-medium text-brand-900 mt-2 leading-tight">{{ award.badge.name }}</span>
+                                </div>
+                            {% endfor %}
+                            {% for badge in locked_badges %}
+                                <div class="flex flex-col items-center text-center w-24 opacity-40 grayscale" title="Locked — {{ badge.description }}">
+                                    <span class="w-14 h-14 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-2xl">{{ badge.icon }}</span>
+                                    <span class="text-xs font-medium text-brand-500 mt-2 leading-tight">{{ badge.name }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-brand-600 text-sm text-center py-4">Pass a motif quiz to earn your first badge.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Account Info (full row) -->
+            <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden lg:col-span-2">
+                <div class="px-5 py-4 border-b border-brand-100 flex items-center justify-between">
+                    <h2 class="font-bold text-brand-900">Account Information</h2>
+                    <a href="{% url 'accounts:profile_edit' %}" class="text-sm font-medium text-brand-700 hover:text-brand-900">Edit profile →</a>
+                </div>
+                <div class="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                     <div>
                         <p class="text-xs text-brand-500 uppercase tracking-wider">Name</p>
                         <p class="font-medium text-brand-900 mt-0.5">{{ user.full_name|default:"Not provided" }}</p>

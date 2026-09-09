@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard - Moving Train Chess Academy{% endblock %}
+
+{% block content %}
+<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
+    <div class="max-w-3xl mx-auto">
+        <div class="mb-6">
+            <h1 class="text-2xl lg:text-3xl font-bold text-brand-900">Leaderboard</h1>
+            <p class="text-brand-600 mt-1">Ranked by level, then best score, then fewest attempts. Students are shown by username only.</p>
+        </div>
+
+        <!-- Motif tabs -->
+        <div class="flex flex-wrap gap-2 mb-6">
+            {% for value, label in motifs %}
+                <a href="{% url 'quiz:leaderboard' motif=value %}"
+                   class="px-4 py-2 text-sm font-medium rounded-full border transition-colors
+                          {% if value == motif %}bg-brand-600 text-white border-brand-600{% else %}bg-white text-brand-700 border-brand-200 hover:bg-brand-50{% endif %}">
+                    {{ label }}
+                </a>
+            {% endfor %}
+        </div>
+
+        <div class="card overflow-hidden">
+            {% if rows %}
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-brand-50 text-brand-700 text-left">
+                            <th class="px-4 py-3 font-semibold w-16">Rank</th>
+                            <th class="px-4 py-3 font-semibold">Player</th>
+                            <th class="px-4 py-3 font-semibold">Level</th>
+                            <th class="px-4 py-3 font-semibold text-right">Best Score</th>
+                            <th class="px-4 py-3 font-semibold text-right">Attempts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr class="border-t border-brand-100 {% if row.is_current_user %}bg-amber-50{% endif %}">
+                                <td class="px-4 py-3 font-semibold text-brand-900">
+                                    {% if row.rank == 1 %}🥇{% elif row.rank == 2 %}🥈{% elif row.rank == 3 %}🥉{% else %}{{ row.rank }}{% endif %}
+                                </td>
+                                <td class="px-4 py-3 font-medium text-brand-900">
+                                    {{ row.user.username }}
+                                    {% if row.is_current_user %}<span class="text-xs text-brand-500">(you)</span>{% endif %}
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if row.level == "easy" %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700">Easy</span>
+                                    {% elif row.level == "medium" %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700">Medium</span>
+                                    {% elif row.level == "hard" %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">Hard</span>
+                                    {% else %}
+                                        <span class="text-brand-500">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-right text-brand-900">{{ row.best_score|floatformat:"0" }}%</td>
+                                <td class="px-4 py-3 text-right text-brand-900">{{ row.attempts }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="p-8 text-center text-brand-600">
+                    Nobody has attempted {{ motif_label }} quizzes yet. Take one and claim the top spot!
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

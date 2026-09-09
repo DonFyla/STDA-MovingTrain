@@ -1,11 +1,21 @@
 from datetime import date, time
+from time import time as unix_time
 
+from django.core import mail, signing
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from accounts.tokens import email_verification_token
 from scheduling.models import Coach, Student
 
 User = get_user_model()
+
+
+def _valid_form_ts(age_seconds=10):
+    """A signed form timestamp old enough to pass the time-trap check."""
+    return signing.dumps(str(unix_time() - age_seconds))
 
 
 class CustomUserChangeFormRoleTests(TestCase):
@@ -195,7 +205,7 @@ class AccountsViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "accounts/signup.html")
 
-    def test_signup_creates_student_and_redirects_to_dashboard(self):
+    def test_signup_creates_inactive_student_and_sends_verification_email(self):
         response = self.client.post(
             reverse("accounts:signup"),
             {
@@ -206,16 +216,20 @@ class AccountsViewsTests(TestCase):
                 "role": "student",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
+                "form_ts": _valid_form_ts(),
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("accounts:dashboard"))
+        self.assertEqual(response.url, reverse("accounts:signup_done"))
         user = User.objects.get(email="new@example.com")
         self.assertTrue(user.is_student)
         self.assertFalse(user.is_coach)
+        self.assertFalse(user.is_active)
         self.assertTrue(Student.objects.filter(user=user).exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/verify-email/", mail.outbox[0].body)
 
-    def test_signup_creates_coach_and_redirects_to_scheduling_dashboard(self):
+    def test_signup_creates_inactive_coach_and_sends_verification_email(self):
         response = self.client.post(
             reverse("accounts:signup"),
             {
@@ -226,17 +240,21 @@ class AccountsViewsTests(TestCase):
                 "role": "coach",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
+                "form_ts": _valid_form_ts(),
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("scheduling:coach_dashboard"))
+        self.assertEqual(response.url, reverse("accounts:signup_done"))
         user = User.objects.get(email="coachsignup@example.com")
         self.assertTrue(user.is_coach)
         self.assertFalse(user.is_student)
+        self.assertFalse(user.is_active)
         self.assertTrue(Coach.objects.filter(user=user).exists())
         coach = Coach.objects.get(user=user)
         self.assertEqual(coach.name, "Coach Signup")
         self.assertEqual(coach.email, "coachsignup@example.com")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/verify-email/", mail.outbox[0].body)
 
     def test_dashboard_requires_login(self):
         response = self.client.get(reverse("accounts:dashboard"))
@@ -435,3 +453,332 @@ class StudentDashboardPointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Flex Coach")
         self.assertContains(response, "Points History")
+
+
+class TourSeenTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(
+            email="tourstudent@example.com",
+            username="tourstudent",
+            password="testpass123",
+            is_coach=False,
+        )
+        self.coach_user = User.objects.create_user(
+            email="tourcoach@example.com",
+            username="tourcoach",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+        )
+
+    def test_student_can_mark_tour_seen(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "student"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.student_tour_seen)
+        self.assertFalse(self.student.coach_tour_seen)
+
+    def test_coach_can_mark_tour_seen(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "coach"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.coach_user.refresh_from_db()
+        self.assertTrue(self.coach_user.coach_tour_seen)
+        self.assertFalse(self.coach_user.student_tour_seen)
+
+    def test_mark_tour_seen_requires_login(self):
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "student"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_mark_tour_seen_rejects_invalid_tour(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "coach"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.student_tour_seen)
+        self.assertFalse(self.student.coach_tour_seen)
+
+    def test_mark_tour_seen_rejects_unknown_tour(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "unknown"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.student_tour_seen)
+        self.assertFalse(self.student.coach_tour_seen)
+
+    def test_student_can_reset_tour_seen(self):
+        self.client.force_login(self.student)
+        self.student.student_tour_seen = True
+        self.student.save(update_fields=["student_tour_seen"])
+
+        response = self.client.post(
+            reverse("accounts:mark_tour_seen"),
+            {"tour": "student", "seen": "false"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.student_tour_seen)
+
+    def test_dashboard_passes_tour_seen_flag(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-tour-seen="false"')
+        self.assertContains(response, reverse("accounts:mark_tour_seen"))
+
+
+class AntiBotSignupTests(TestCase):
+    def _signup(self, email, **overrides):
+        data = {
+            "email": email,
+            "username": email.split("@")[0],
+            "full_name": "Test Signup",
+            "phone": "",
+            "role": "student",
+            "password1": "StrongPass123!",
+            "password2": "StrongPass123!",
+            "form_ts": _valid_form_ts(),
+        }
+        data.update(overrides)
+        return self.client.post(reverse("accounts:signup"), data)
+
+    def test_honeypot_filled_rejects_signup(self):
+        response = self._signup("bot@example.com", company="spammy")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email="bot@example.com").exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_time_trap_rejects_instant_submission(self):
+        response = self._signup("fast@example.com", form_ts=signing.dumps(str(unix_time())))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email="fast@example.com").exists())
+
+    def test_time_trap_rejects_forged_timestamp(self):
+        response = self._signup("forged@example.com", form_ts="not-a-signature")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email="forged@example.com").exists())
+
+    def test_signup_done_page_renders(self):
+        response = self.client.get(reverse("accounts:signup_done"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/signup_done.html")
+
+
+class EmailVerificationTests(TestCase):
+    def _create_unverified_user(self, email="unverified@example.com", **kwargs):
+        defaults = {
+            "username": email.split("@")[0],
+            "password": "testpass123",
+            "is_active": False,
+        }
+        defaults.update(kwargs)
+        return User.objects.create_user(email=email, **defaults)
+
+    def _verify_url(self, user, token=None):
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = token or email_verification_token.make_token(user)
+        return reverse("accounts:verify_email", args=[uid, token])
+
+    def test_verify_email_activates_and_logs_in_student(self):
+        user = self._create_unverified_user()
+        response = self.client.get(self._verify_url(user))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("accounts:dashboard"))
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertEqual(response.wsgi_request.user, user)
+
+    def test_verify_email_redirects_coach_to_coach_dashboard(self):
+        user = self._create_unverified_user(
+            email="coachverify@example.com",
+            is_coach=True,
+            is_student=False,
+        )
+        Coach.objects.create(user=user, name="Coach Verify", email=user.email)
+        response = self.client.get(self._verify_url(user))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("scheduling:coach_dashboard"))
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    def test_verify_email_with_bad_token_stays_inactive(self):
+        user = self._create_unverified_user()
+        response = self.client.get(self._verify_url(user, token="bogus-token"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/verify_email_invalid.html")
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_verify_email_token_invalid_after_activation(self):
+        user = self._create_unverified_user()
+        url = self._verify_url(user)
+        self.client.get(url)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        # Replaying the same link must not succeed again.
+        self.client.logout()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("accounts:login"))
+
+    def test_login_blocked_before_verification(self):
+        self._create_unverified_user()
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "unverified@example.com", "password": "testpass123"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_resend_sends_email_to_inactive_user(self):
+        self._create_unverified_user()
+        response = self.client.post(
+            reverse("accounts:resend_verification"),
+            {"email": "unverified@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "we've sent a fresh verification link")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/verify-email/", mail.outbox[0].body)
+
+    def test_resend_unknown_email_shows_same_confirmation(self):
+        response = self.client.post(
+            reverse("accounts:resend_verification"),
+            {"email": "ghost@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "we've sent a fresh verification link")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_resend_page_renders(self):
+        response = self.client.get(reverse("accounts:resend_verification"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/resend_verification.html")
+
+
+class ProfileEditTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(
+            email="profilestudent@example.com",
+            username="profilestudent",
+            password="testpass123",
+            full_name="Profile Student",
+            is_coach=False,
+        )
+        self.coach_user = User.objects.create_user(
+            email="profilecoach@example.com",
+            username="profilecoach",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+        )
+
+    def _payload(self, **overrides):
+        data = {
+            "full_name": "Updated Name",
+            "phone": "08012345678",
+            "date_of_birth": "2012-05-14",
+            "parent_name": "Parent Name",
+            "parent_phone": "08099998888",
+            "school": "Test Academy",
+            "chess_rating": 1200,
+            "bio": "I love chess.",
+        }
+        data.update(overrides)
+        return data
+
+    def test_profile_edit_requires_login(self):
+        response = self.client.get(reverse("accounts:profile_edit"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+    def test_student_can_view_profile_edit_page(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("accounts:profile_edit"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/profile_edit.html")
+
+    def test_student_can_update_account_and_profile_fields(self):
+        self.client.force_login(self.student)
+        response = self.client.post(reverse("accounts:profile_edit"), self._payload())
+        self.assertEqual(response.status_code, 302)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.full_name, "Updated Name")
+        self.assertEqual(self.student.phone, "08012345678")
+        profile = Student.objects.get(user=self.student)
+        self.assertEqual(str(profile.date_of_birth), "2012-05-14")
+        self.assertEqual(profile.parent_name, "Parent Name")
+        self.assertEqual(profile.parent_phone, "08099998888")
+        self.assertEqual(profile.school, "Test Academy")
+        self.assertEqual(profile.chess_rating, 1200)
+        self.assertEqual(profile.bio, "I love chess.")
+
+    def test_invalid_date_rejected_without_saving(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("accounts:profile_edit"),
+            self._payload(date_of_birth="not-a-date"),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertNotEqual(self.student.full_name, "Updated Name")
+
+    def test_coach_redirected_to_coach_dashboard(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("accounts:profile_edit"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("scheduling:coach_dashboard"))
+
+
+class PasswordChangeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="pwchange@example.com",
+            username="pwchange",
+            password="OldPass123!",
+        )
+
+    def test_password_change_flow(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:password_change"),
+            {
+                "old_password": "OldPass123!",
+                "new_password1": "NewStrongPass456!",
+                "new_password2": "NewStrongPass456!",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("accounts:password_change_done"))
+        # Session is kept alive after the change.
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+        # New password works, old one does not.
+        self.client.logout()
+        self.assertTrue(
+            self.client.login(username="pwchange@example.com", password="NewStrongPass456!")
+        )
+        self.client.logout()
+        self.assertFalse(
+            self.client.login(username="pwchange@example.com", password="OldPass123!")
+        )
+
+    def test_password_change_requires_login(self):
+        response = self.client.get(reverse("accounts:password_change"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)

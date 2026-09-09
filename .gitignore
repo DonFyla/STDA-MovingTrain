@@ -12,6 +12,7 @@ __pycache__/
 *.sqlite3
 db.sqlite3
 *.log
+logs/
 media/
 staticfiles/
 node_modules/
@@ -43,3 +44,6 @@ certbot_data/
 *.pem
 *.key
 *.crt
+
+# Lichess puzzle database download (imported via management command)
+lichess_db_puzzle.csv*

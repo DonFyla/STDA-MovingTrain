@@ -28,8 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.sitemaps",
     "django_extensions",
     "widget_tweaks",
-    "ckeditor",
-    "ckeditor_uploader",
+    "django_ckeditor_5",
     # Local apps
     "web",
     "accounts",
@@ -37,6 +36,7 @@ INSTALLED_APPS = [
     "scheduling",
     "payments",
     "admin_portal",
+    "blog",
 ]
 
 MIDDLEWARE = [
@@ -99,6 +99,16 @@ CACHES = {
     }
 }
 
+# Rate limiting: read the client IP set by the nginx reverse proxy instead of
+# REMOTE_ADDR (which is always the proxy's address). nginx overwrites X-Real-IP,
+# so clients cannot spoof it. Falls back to REMOTE_ADDR when not behind nginx
+# (e.g. local development).
+def _client_ip_for_ratelimit(request):
+    return request.META.get("HTTP_X_REAL_IP") or request.META.get("REMOTE_ADDR", "")
+
+
+RATELIMIT_IP_META_KEY = _client_ip_for_ratelimit
+
 # Sessions
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
@@ -142,7 +152,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
-CKEDITOR_UPLOAD_PATH = "uploads/"
+CKEDITOR_5_UPLOAD_PATH = "uploads/"
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -150,19 +160,64 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Custom user model
 AUTH_USER_MODEL = "accounts.User"
 
-# Silence known warnings
-# TODO: Migrate from django-ckeditor (CKEditor 4) to a maintained editor
-# (e.g., django-ckeditor-5 or a plain textarea) to resolve the security warning.
-SILENCED_SYSTEM_CHECKS = ["ckeditor.W001"]
-
-# CKEditor
-CKEDITOR_CONFIGS = {
+# CKEditor 5
+CKEDITOR_5_CONFIGS = {
     "default": {
-        "toolbar": "full",
-        "height": 300,
-        "width": "100%",
+        "toolbar": {
+            "items": [
+                "heading", "|",
+                "bold", "italic", "underline", "strikethrough", "code",
+                "subscript", "superscript", "highlight", "|",
+                "fontSize", "fontColor", "fontBackgroundColor", "alignment", "|",
+                "link", "blockQuote", "codeBlock", "|",
+                "bulletedList", "numberedList", "outdent", "indent", "|",
+                "imageUpload", "insertTable", "mediaEmbed", "horizontalLine",
+                "specialCharacters", "|",
+                "findAndReplace", "selectAll", "removeFormat", "sourceEditing", "|",
+                "undo", "redo",
+            ],
+            "shouldNotGroupWhenFull": True,
+        },
+        "heading": {
+            "options": [
+                {"model": "paragraph", "title": "Paragraph", "class": "ck-heading_paragraph"},
+                {"model": "heading2", "view": "h2", "title": "Heading 2", "class": "ck-heading_heading2"},
+                {"model": "heading3", "view": "h3", "title": "Heading 3", "class": "ck-heading_heading3"},
+                {"model": "heading4", "view": "h4", "title": "Heading 4", "class": "ck-heading_heading4"},
+            ],
+        },
+        "fontSize": {
+            "options": ["tiny", "small", "default", "big", "huge"],
+        },
+        "image": {
+            # Note: resize options are left at CKEditor's defaults
+            # (Original / Custom / 25% / 50% / 75% + drag handles). A custom
+            # "value": None for the original option would be serialized to
+            # null, which crashes django-ckeditor-5's JSON.parse reviver.
+            "toolbar": [
+                "toggleImageCaption", "|",
+                "imageStyle:inline", "imageStyle:block", "imageStyle:side", "|",
+                "linkImage", "resizeImage",
+            ],
+        },
+        "table": {
+            "contentToolbar": [
+                "tableColumn", "tableRow", "mergeTableCells",
+                "tableProperties", "tableCellProperties",
+            ],
+        },
+        "link": {
+            "defaultProtocol": "https://",
+        },
+        "htmlSupport": {
+            "allow": [
+                {"name": "img", "attributes": ["width", "height", "style"], "classes": True},
+            ],
+        },
     },
 }
+CKEDITOR_5_FILE_UPLOAD_PERMISSION = "authenticated"
+CKEDITOR_5_CUSTOM_CSS = "css/ckeditor5-content.css"
 
 # Email
 EMAIL_BACKEND = config(
@@ -176,9 +231,10 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="bookings@themovingtrain.org")
 
-# Paystack
-PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
-PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
+# Flutterwave
+FLUTTERWAVE_SECRET_KEY = config("FLUTTERWAVE_SECRET_KEY", default="")
+FLUTTERWAVE_PUBLIC_KEY = config("FLUTTERWAVE_PUBLIC_KEY", default="")
+FLUTTERWAVE_WEBHOOK_SECRET = config("FLUTTERWAVE_WEBHOOK_SECRET", default="")
 
 # Google Tags / Ads (optional; loaded in base template when set)
 GOOGLE_TAG_MANAGER_ID = config("GOOGLE_TAG_MANAGER_ID", default="")
@@ -193,6 +249,12 @@ SITE_DEFAULT_IMAGE = config(
     "SITE_DEFAULT_IMAGE", default="static/images/others/logo.svg"
 )
 
+# In-page booking guide widget
+GUIDE_ENABLED = config("GUIDE_ENABLED", default=True, cast=bool)
+
+# Blog: allow student accounts to write posts (coaches always can)
+BLOG_ALLOW_STUDENT_POSTS = config("BLOG_ALLOW_STUDENT_POSTS", default=False, cast=bool)
+
 # Security headers (enable in production)
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)
@@ -201,17 +263,39 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
+# Reverse proxy settings (required when running behind Nginx on Contabo)
+USE_X_FORWARDED_HOST = config("USE_X_FORWARDED_HOST", default=True, cast=bool)
+USE_X_FORWARDED_PORT = config("USE_X_FORWARDED_PORT", default=True, cast=bool)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # Logging
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} [{levelname}] {name}: {message}",
+            "style": "{",
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "app.log",
+            "maxBytes": 5 * 1024 * 1024,  # 5 MB
+            "backupCount": 5,
+            "formatter": "verbose",
         },
     },
     "root": {
-        "handlers": ["console"],
-        "level": "INFO",
+        "handlers": ["console", "file"],
+        "level": config("LOG_LEVEL", default="INFO"),
     },
 }

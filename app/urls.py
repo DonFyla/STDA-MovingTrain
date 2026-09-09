@@ -9,21 +9,24 @@ from django.views.generic.base import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
 from app.admin import site as admin_site
+from blog.sitemaps import PostSitemap
 from web.sitemaps import StaticViewSitemap, CourseSitemap
 
 sitemaps = {
     "static": StaticViewSitemap,
     "courses": CourseSitemap,
+    "blog": PostSitemap,
 }
 
 urlpatterns = [
     path("admin/", admin_site.urls),
-    path("ckeditor/", include("ckeditor_uploader.urls")),
+    path("ckeditor5/", include("django_ckeditor_5.urls")),
     path("", include("web.urls")),
     path("accounts/", include("accounts.urls")),
     path("quiz/", include("quiz.urls")),
     path("scheduling/", include("scheduling.urls")),
     path("payments/", include("payments.urls")),
+    path("blog/", include("blog.urls")),
     path("admin-portal/", include("admin_portal.urls")),
     path(
         "robots.txt",

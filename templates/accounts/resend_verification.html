@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Resend Verification Link - Moving Train Chess Academy{% endblock %}
+
+{% block content %}
+<section class="min-h-[calc(100vh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="w-full max-w-md">
+        <div class="bg-white rounded-2xl shadow-lg p-8 border border-brand-100">
+            {% if sent %}
+                <div class="text-center">
+                    <div class="w-14 h-14 bg-brand-50 rounded-full flex items-center justify-center text-brand-600 mx-auto mb-5">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <h1 class="text-2xl font-bold text-brand-900 mb-2">Check your email</h1>
+                    <p class="text-brand-600 mb-6">
+                        If that email is registered and not yet verified, we've sent a fresh verification link.
+                    </p>
+                    <a href="{% url 'accounts:login' %}" class="font-semibold text-brand-800 hover:underline text-sm">Back to login</a>
+                </div>
+            {% else %}
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold text-brand-900">Resend verification link</h1>
+                    <p class="mt-2 text-brand-600">Enter the email you signed up with</p>
+                </div>
+
+                <form method="post" class="space-y-5">
+                    {% csrf_token %}
+                    <div>
+                        <label for="id_email" class="block text-sm font-medium text-brand-700 mb-1">Email</label>
+                        <input type="email" name="email" id="id_email" required
+                               class="w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all">
+                    </div>
+                    <button type="submit" class="w-full px-6 py-3 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors">
+                        Send verification link
+                    </button>
+                </form>
+
+                <p class="mt-6 text-center text-sm text-brand-600">
+                    Already verified?
+                    <a href="{% url 'accounts:login' %}" class="font-semibold text-brand-800 hover:underline">Log in</a>
+                </p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

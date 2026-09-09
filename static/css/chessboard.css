@@ -1,0 +1,94 @@
+/* Chessground theme overrides for the quiz boards (templates/quiz/_chessboard*.html).
+ *
+ * Two purposes:
+ * 1. Deeper board colors — replaces the washed-out default "brown" theme
+ *    (light #f0d9b5 + 20% black overlay ≈ #c0ae91) with explicit, deep
+ *    walnut tones: light #e0af6a, dark #87511f.
+ * 2. Well-aligned coordinates — chessground's reference base.css is calibrated
+ *    for lichess's own layout, not a standalone board: the file letters are
+ *    offset 24px right and 4px below the board edge, and the rank strip starts
+ *    20px above the board. The rules below pin every strip exactly onto the
+ *    board's edge squares. Load this file AFTER the three chessground CDN
+ *    stylesheets (see templates/quiz/_chessboard_assets.html).
+ */
+
+.quiz-board.cg-wrap cg-board {
+  background-color: #e0af6a;
+  background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOng9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHZpZXdCb3g9IjAgMCA4IDgiIHNoYXBlLXJlbmRlcmluZz0iY3Jpc3BFZGdlcyI+PGcgaWQ9ImEiPjxnIGlkPSJiIj48ZyBpZD0iYyI+PGcgaWQ9ImQiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGlkPSJlIiBmaWxsPSIjZTBhZjZhIi8+PHVzZSB4PSIxIiB5PSIxIiBocmVmPSIjZSIgeDpocmVmPSIjZSIvPjxyZWN0IHk9IjEiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGlkPSJmIiBmaWxsPSIjODc1MTFmIi8+PHVzZSB4PSIxIiB5PSItMSIgaHJlZj0iI2YiIHg6aHJlZj0iI2YiLz48L2c+PHVzZSB4PSIyIiBocmVmPSIjZCIgeDpocmVmPSIjZCIvPjwvZz48dXNlIHg9IjQiIGhyZWY9IiNjIiB4OmhyZWY9IiNjIi8+PC9nPjx1c2UgeT0iMiIgaHJlZj0iI2IiIHg6aHJlZj0iI2IiLz48L2c+PHVzZSB5PSI0IiBocmVmPSIjYSIgeDpocmVmPSIjYSIvPjwvc3ZnPg==');
+}
+
+/* Move hint / highlight tones, retuned for the deeper squares. */
+.quiz-board.cg-wrap cg-board square.last-move {
+  background-color: rgba(255, 213, 79, 0.45);
+}
+
+/* Coordinates: neutralize global CSS (Tailwind preflight etc.) and pin the
+ * strips to the board edges. NB: chessground puts the cg-wrap class on the
+ * .quiz-board element itself, and coords live in cg-container — NOT inside a
+ * .cg-wrap descendant — so scope with .quiz-board.cg-wrap. */
+.quiz-board.cg-wrap coords {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  opacity: 1;
+}
+
+/* Rank numbers: top-left corner inside each rank's square (base.css starts
+ * the strip 20px above the board — fix). */
+.quiz-board.cg-wrap coords.ranks {
+  top: 0;
+  left: 4px;
+  width: 12px;
+  height: 100%;
+}
+
+.quiz-board.cg-wrap coords.ranks coord {
+  transform: none;
+  padding-top: 3px;
+}
+
+/* File letters: bottom-left corner inside each file's bottom square, a few
+ * pixels off the lines (base.css centers them 24px right and 4px below the
+ * board — fix). */
+.quiz-board.cg-wrap coords.files {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 12.5%;
+  align-items: flex-end;
+}
+
+.quiz-board.cg-wrap coords.files coord {
+  text-align: left;
+  padding-left: 4px;
+  padding-bottom: 3px;
+}
+
+/* Label colors chosen for contrast against the deeper squares:
+ * dark walnut text on light squares, warm cream on dark squares.
+ *
+ * NB: chessground renders both strips in DOM order (ranks 1..8, files a..h)
+ * for both orientations, flipping display with flex-flow — so a label's
+ * parity in the DOM maps to its square color the same way for ranks and
+ * files. Anchor fact: a1 is a DARK square. White orientation: the a-file
+ * and rank 1 are at the left/bottom, so odd children sit on dark squares.
+ * Black orientation flips the board, so odd children sit on light squares.
+ * brown.css's reference rules group ranks and files with opposite parity
+ * and make half the labels invisible on a standalone board. */
+.orientation-white .ranks :nth-child(odd),
+.orientation-white .files :nth-child(odd),
+.orientation-black .ranks :nth-child(even),
+.orientation-black .files :nth-child(even) {
+  color: #fff6e2;
+  text-shadow: 0 0 2px rgba(40, 20, 0, 0.6);
+}
+
+.orientation-white .ranks :nth-child(even),
+.orientation-white .files :nth-child(even),
+.orientation-black .ranks :nth-child(odd),
+.orientation-black .files :nth-child(odd) {
+  color: #361f06;
+}

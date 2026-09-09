@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Activity Feed - Moving Train Chess Academy{% endblock %}
+
+{% block content %}
+<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
+    <div class="max-w-2xl mx-auto">
+        <div class="mb-8">
+            <h1 class="text-2xl lg:text-3xl font-bold text-brand-900">Activity Feed</h1>
+            <p class="text-brand-600 mt-1">Badges earned and levels reached across the academy.</p>
+        </div>
+
+        {% if activities %}
+            <div class="space-y-3">
+                {% for activity in activities %}
+                    <div class="card p-4 flex items-start gap-3">
+                        <div class="w-9 h-9 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center shrink-0">
+                            {% if activity.kind == "badge" %}
+                                <span class="text-lg">{{ activity.badge.icon|default:"🏅" }}</span>
+                            {% else %}
+                                <span class="text-lg">⭐</span>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm text-brand-900">
+                                <span class="font-semibold">{{ activity.user.username }}</span>
+                                {{ activity.text }}
+                            </p>
+                            <p class="text-xs text-brand-500 mt-0.5">{{ activity.created_at|naturaltime }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="card p-8 text-center text-brand-600">
+                No activity yet — pass a motif quiz and be the first on the feed!
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

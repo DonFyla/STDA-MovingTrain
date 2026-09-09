@@ -6,9 +6,18 @@
 <section class="container mx-auto px-6 py-16">
     <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-8">
         <div class="flex justify-between items-center mb-6">
+            {% if question.questionnaire.motif %}
+            <span class="text-sm font-medium text-[#5E5044]">
+                Motif: {{ question.questionnaire.get_motif_display }}
+                {% if question.questionnaire.difficulty %}&middot; {{ question.questionnaire.get_difficulty_display }}{% endif %}
+            </span>
+            {% else %}
             <span class="text-sm font-medium text-[#5E5044]">Skill: {{ qtaker.get_skill_display }}</span>
+            {% endif %}
             <span class="text-sm text-gray-500">Question {{ progress.current }} of {{ progress.total }}</span>
         </div>
+
+        {% include "quiz/_chessboard.html" %}
 
         <div class="mb-8">
             <h2 class="text-xl font-semibold mb-4">{{ question.question|safe }}</h2>
@@ -26,10 +35,18 @@
                     {% endfor %}
                 </div>
             {% else %}
+                {% if question.fen and question.solution_uci %}
+                    <input type="hidden" name="answer" id="id_answer">
+                    <div class="flex items-center justify-between">
+                        <p id="board-status" class="text-sm text-gray-500">Play your move on the board, then submit.</p>
+                        <button type="button" id="board-reset" class="text-sm text-[#5E5044] underline">Reset board</button>
+                    </div>
+                {% else %}
                 <div>
                     <label for="{{ form.answer.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">Your answer</label>
                     {{ form.answer }}
                 </div>
+                {% endif %}
             {% endif %}
 
             {% if form.answer.errors %}
@@ -42,4 +59,20 @@
         </form>
     </div>
 </section>
+{% endblock %}
+
+{% block extra_css %}
+{% if question.fen %}
+{% include "quiz/_chessboard_assets.html" %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if question.fen %}
+{% if question.solution_uci %}
+{% include "quiz/_chessboard_interactive.html" %}
+{% else %}
+{% include "quiz/_chessboard_init.html" %}
+{% endif %}
+{% endif %}
 {% endblock %}

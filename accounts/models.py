@@ -10,6 +10,8 @@ class User(AbstractUser):
     full_name = models.CharField(max_length=255, blank=True, default="")
     is_coach = models.BooleanField(default=False)
     is_student = models.BooleanField(default=True)
+    student_tour_seen = models.BooleanField(default=False)
+    coach_tour_seen = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]

@@ -41,6 +41,12 @@
                     {% endif %}
                 </div>
 
+                <div class="text-right text-sm">
+                    <a href="{% url 'accounts:password_reset' %}" class="font-semibold text-brand-800 hover:underline">
+                        Forgot password?
+                    </a>
+                </div>
+
                 <button type="submit" class="w-full px-6 py-3 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors">
                     Login
                 </button>
@@ -49,6 +55,10 @@
             <p class="mt-6 text-center text-sm text-brand-600">
                 Don't have an account?
                 <a href="{% url 'accounts:signup' %}" class="font-semibold text-brand-800 hover:underline">Sign up</a>
+            </p>
+            <p class="mt-2 text-center text-sm text-brand-600">
+                Haven't verified your email yet?
+                <a href="{% url 'accounts:resend_verification' %}" class="font-semibold text-brand-800 hover:underline">Resend verification link</a>
             </p>
         </div>
     </div>

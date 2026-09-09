@@ -29,7 +29,9 @@
                             <tr class="hover:bg-brand-50/50">
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-3">
-                                        {% if coach.photo_url %}
+                                        {% if coach.photo %}
+                                            <img src="{{ coach.photo.url }}" alt="" class="w-10 h-10 rounded-full object-cover">
+                                        {% elif coach.photo_url %}
                                             <img src="{{ coach.photo_url }}" alt="" class="w-10 h-10 rounded-full object-cover">
                                         {% else %}
                                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 font-bold">

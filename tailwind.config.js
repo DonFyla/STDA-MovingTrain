@@ -3,6 +3,7 @@ module.exports = {
   content: [
     "./templates/**/*.html",
     "./**/templates/**/*.html",
+    "./static/js/booking-guide.js",
   ],
   safelist: [
     "from-purple-500",
@@ -17,6 +18,8 @@ module.exports = {
     "to-violet-700",
     "from-pink-500",
     "to-pink-700",
+    "from-amber-500",
+    "to-amber-700",
     "bg-purple-100",
     "text-purple-700",
     "bg-blue-100",

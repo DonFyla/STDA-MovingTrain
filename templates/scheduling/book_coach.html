@@ -4,7 +4,9 @@
 {% block title %}Book {{ coach.name }} - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="min-h-screen bg-brand-50 py-16 lg:py-24">
+<section class="min-h-screen bg-brand-50 py-16 lg:py-24" data-guide-page="book_coach"
+         data-tour-seen="{{ user.student_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <a href="{% url 'tutors' %}" class="inline-flex items-center text-brand-700 hover:text-brand-900 font-medium mb-8">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -30,8 +32,33 @@
                 </div>
             </div>
 
+            <!-- Booking Stepper -->
+            <div id="booking-stepper" class="mb-10">
+                <div class="flex items-start justify-between max-w-3xl mx-auto">
+                    <div class="flex-1 flex flex-col items-center relative" data-step="1">
+                        <div class="step-circle w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 bg-white border-brand-200 text-brand-600">1</div>
+                        <span class="step-label text-xs mt-2 text-center text-brand-400 font-medium">Choose type</span>
+                        <div class="step-line absolute top-4 left-1/2 w-full h-0.5 bg-brand-200 -z-10"></div>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center relative" data-step="2">
+                        <div class="step-circle w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 bg-white border-brand-200 text-brand-600">2</div>
+                        <span class="step-label text-xs mt-2 text-center text-brand-400 font-medium">Pick date/time</span>
+                        <div class="step-line absolute top-4 left-1/2 w-full h-0.5 bg-brand-200 -z-10"></div>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center relative" data-step="3">
+                        <div class="step-circle w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 bg-white border-brand-200 text-brand-600">3</div>
+                        <span class="step-label text-xs mt-2 text-center text-brand-400 font-medium">Your info</span>
+                        <div class="step-line absolute top-4 left-1/2 w-full h-0.5 bg-brand-200 -z-10"></div>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center relative" data-step="4">
+                        <div class="step-circle w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 bg-white border-brand-200 text-brand-600">4</div>
+                        <span class="step-label text-xs mt-2 text-center text-brand-400 font-medium">Complete</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tabs -->
-            <div class="mb-8">
+            <div class="mb-8" data-tour="booking-tabs">
                 <div class="inline-flex p-1 bg-white rounded-xl border border-brand-200 shadow-sm">
                     <button type="button" onclick="switchTab('points')" id="tab-points" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white">
                         <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -71,7 +98,8 @@
                                 Cost: <span id="selected-cost" class="font-bold text-brand-900">0</span> points
                             </div>
                         </div>
-                        <div id="calendar-container" class="space-y-6"></div>
+                        <p class="text-sm text-brand-500 mb-4">Sessions must be booked at least 24 hours in advance.</p>
+                        <div id="calendar-container" data-tour="time-selection" class="space-y-6"></div>
                     </div>
 
                     <!-- Selected Slots Summary -->
@@ -81,7 +109,7 @@
                     </div>
 
                     <!-- Student Info -->
-                    <div class="card p-6 md:p-8">
+                    <div class="card p-6 md:p-8" data-tour="student-info">
                         <h2 class="text-xl font-bold text-brand-900 mb-5">Your Information</h2>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
@@ -111,7 +139,7 @@
                         </div>
 
                         <div class="mt-6">
-                            <button type="submit" id="points-submit-btn" class="w-full sm:w-auto px-8 py-4 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            <button type="submit" id="points-submit-btn" data-tour="payment-button" class="w-full sm:w-auto px-8 py-4 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                                 Complete Points Booking
                             </button>
                             <a href="{% url 'payments:buy_points' %}" id="buy-points-link" class="hidden ml-4 px-8 py-4 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors inline-flex items-center">
@@ -186,6 +214,7 @@
                         </div>
                         <input type="hidden" name="day_of_week_1" id="r-day-of-week-1" value="{{ recurring_form.day_of_week_1.value|default:'' }}">
                         {{ recurring_form.time_slot_1 }}
+                        <p class="text-sm text-brand-500 mb-4">Your first session must be at least 24 hours from now.</p>
                         <div id="r-slots-container-1" class="hidden">
                             <p class="text-sm font-medium text-brand-700 mb-3">Select Time</p>
                             <div class="flex flex-wrap gap-3" id="r-slots-list-1"></div>
@@ -217,6 +246,7 @@
                         </div>
                         <input type="hidden" name="day_of_week_2" id="r-day-of-week-2" value="{{ recurring_form.day_of_week_2.value|default:'' }}">
                         {{ recurring_form.time_slot_2 }}
+                        <p class="text-sm text-brand-500 mb-4">Your first session must be at least 24 hours from now.</p>
                         <div id="r-slots-container-2" class="hidden">
                             <p class="text-sm font-medium text-brand-700 mb-3">Select Time</p>
                             <div class="flex flex-wrap gap-3" id="r-slots-list-2"></div>
@@ -301,6 +331,7 @@
                                     Rate: ₦{{ price_per_session|floatformat:0 }} / session
                                 </div>
                             </div>
+                            <p class="text-sm text-brand-500 mb-4">Sessions must be booked at least 24 hours in advance. Sooner slots appear greyed out.</p>
                             <div id="special-calendar-container" class="space-y-6"></div>
                         </div>
 
@@ -371,7 +402,7 @@
                                     Proceed to Payment
                                 </button>
                             </div>
-                            <p class="text-xs text-brand-500 mt-3 text-center">Secure payment via Paystack</p>
+                            <p class="text-xs text-brand-500 mt-3 text-center">Secure payment via Flutterwave</p>
                         </div>
                     </div>
                 </form>
@@ -404,6 +435,10 @@
         const activeBtn = document.getElementById('tab-' + tab);
         activeBtn.classList.remove('text-brand-700', 'hover:bg-brand-100');
         activeBtn.classList.add('bg-brand-600', 'text-white');
+
+        if (typeof updateBookingStepper === 'function') {
+            updateBookingStepper(1);
+        }
     }
 
     // ================= POINTS BOOKING =================
@@ -442,6 +477,17 @@
         const now = new Date();
         const lagosStr = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
         return new Date(lagosStr + 'T00:00:00');
+    }
+
+    function getLagosNow() {
+        // Naive Date whose fields match Lagos wall-clock time
+        return new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    }
+
+    function isWithinNoticePeriod(dateStr, startTime) {
+        const minBookingTime = getLagosNow();
+        minBookingTime.setHours(minBookingTime.getHours() + 24);
+        return new Date(dateStr + 'T' + startTime + ':00') <= minBookingTime;
     }
 
     function generateCalendar() {
@@ -492,6 +538,9 @@
                 } else {
                     content = '<div class="space-y-1">' + availableSlots.map(slot => {
                         const isSelected = selectedPointsSlots.some(s => s.date === dateStr && s.start_time === slot.start_time);
+                        if (isWithinNoticePeriod(dateStr, slot.start_time)) {
+                            return `<button type="button" disabled title="Book at least 24 hours in advance" class="w-full text-xs py-1.5 px-1 rounded bg-gray-100 text-gray-400 cursor-not-allowed">${formatTime(slot.start_time)}</button>`;
+                        }
                         return `<button type="button" onclick="togglePointsSlot('${dateStr}', ${dayIndex}, '${slot.start_time}', '${slot.end_time}')" class="w-full text-xs py-1.5 px-1 rounded transition-colors ${isSelected ? 'bg-brand-600 text-white' : 'bg-white hover:bg-brand-100 border border-brand-200 text-brand-700'}">${formatTime(slot.start_time)}</button>`;
                     }).join('') + '</div>';
                 }
@@ -512,6 +561,9 @@
 
     function togglePointsSlot(dateStr, dayOfWeek, startTime, endTime) {
         const existingIndex = selectedPointsSlots.findIndex(s => s.date === dateStr && s.start_time === startTime);
+        if (existingIndex < 0 && isWithinNoticePeriod(dateStr, startTime)) {
+            return;
+        }
         if (existingIndex >= 0) {
             selectedPointsSlots.splice(existingIndex, 1);
         } else {
@@ -562,6 +614,10 @@
         } else {
             submitBtn.disabled = false;
             buyLink.classList.add('hidden');
+        }
+
+        if (typeof updateBookingStepper === 'function') {
+            updateBookingStepper(count > 0 ? 2 : 1);
         }
     }
 
@@ -708,6 +764,10 @@
         renderRecurringSlots(session);
         updateRecurringSummary();
         updateRecurringStudentFormVisibility();
+
+        if (typeof updateBookingStepper === 'function') {
+            updateBookingStepper(2);
+        }
     }
 
     function updateRecurringSummary() {
@@ -739,6 +799,10 @@
             studentForm.classList.remove('hidden');
         } else {
             studentForm.classList.add('hidden');
+        }
+
+        if (typeof updateBookingStepper === 'function') {
+            updateBookingStepper(ready ? 3 : 2);
         }
     }
 
@@ -811,6 +875,9 @@
                 } else {
                     content = '<div class="space-y-1">' + availableSlots.map(slot => {
                         const isSelected = selectedSpecialSlots.some(s => s.date === dateStr && s.start_time === slot.start_time);
+                        if (isWithinNoticePeriod(dateStr, slot.start_time)) {
+                            return `<button type="button" disabled title="Book at least 24 hours in advance" class="w-full text-xs py-1.5 px-1 rounded bg-gray-100 text-gray-400 cursor-not-allowed">${formatTime(slot.start_time)}</button>`;
+                        }
                         return `<button type="button" onclick="toggleSpecialSlot('${dateStr}', ${dayIndex}, '${slot.start_time}', '${slot.end_time}')" class="w-full text-xs py-1.5 px-1 rounded transition-colors ${isSelected ? 'bg-brand-600 text-white' : 'bg-white hover:bg-brand-100 border border-brand-200 text-brand-700'}">${formatTime(slot.start_time)}</button>`;
                     }).join('') + '</div>';
                 }
@@ -831,6 +898,9 @@
 
     function toggleSpecialSlot(dateStr, dayOfWeek, startTime, endTime) {
         const existingIndex = selectedSpecialSlots.findIndex(s => s.date === dateStr && s.start_time === startTime);
+        if (existingIndex < 0 && isWithinNoticePeriod(dateStr, startTime)) {
+            return;
+        }
         if (existingIndex >= 0) {
             selectedSpecialSlots.splice(existingIndex, 1);
         } else {
@@ -843,6 +913,10 @@
         selectedSpecialSlots.sort((a, b) => a.date.localeCompare(b.date) || a.start_time.localeCompare(b.start_time));
         updateSpecialSummary();
         generateSpecialCalendar();
+
+        if (typeof updateBookingStepper === 'function') {
+            updateBookingStepper(selectedSpecialSlots.length > 0 ? 2 : 1);
+        }
     }
 
     function getSpecialDiscount(count) {
@@ -944,6 +1018,10 @@
         updateRecurringMode();
         renderRecurringDayButtons(1);
         renderRecurringDayButtons(2);
+
+        if (typeof updateBookingStepper === 'function') {
+            updateBookingStepper(1);
+        }
 
         // Handle ?tab=special query param
         const urlParams = new URLSearchParams(window.location.search);

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block title %}Submit Quiz Question - Moving Train Chess Academy{% endblock %}
+
+{% block content %}
+<section class="min-h-screen bg-brand-50 py-12">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-3xl mx-auto">
+            <a href="{% url 'scheduling:coach_dashboard' %}" class="inline-flex items-center text-brand-700 hover:text-brand-900 font-medium mb-6">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Coach dashboard
+            </a>
+
+            <div class="bg-white rounded-2xl shadow-lg p-8 border border-brand-100">
+                <h1 class="text-2xl font-bold text-brand-900 mb-2">Submit a quiz question</h1>
+                <p class="text-sm text-brand-600 mb-6">Your question will be reviewed by staff before it appears in quizzes.</p>
+
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                            {{ form.non_field_errors|first }}
+                        </div>
+                    {% endif %}
+
+                    <div>
+                        <label for="{{ form.questionnaire.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Skill level</label>
+                        {{ form.questionnaire|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        {% if form.questionnaire.errors %}<p class="mt-1 text-sm text-red-600">{{ form.questionnaire.errors|first }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.question_type.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Question type</label>
+                        {{ form.question_type|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        {% if form.question_type.errors %}<p class="mt-1 text-sm text-red-600">{{ form.question_type.errors|first }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-brand-700 mb-1">Question</label>
+                        {{ form.question }}
+                        {% if form.question.errors %}<p class="mt-1 text-sm text-red-600">{{ form.question.errors|first }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.fen.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Board position (FEN, optional)</label>
+                        {{ form.fen|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        <p class="mt-1 text-xs text-brand-500">Paste a FEN string to show an interactive board with this question.</p>
+                        {% if form.fen.errors %}<p class="mt-1 text-sm text-red-600">{{ form.fen.errors|first }}</p>{% endif %}
+                        <div id="fen-preview" class="quiz-board mt-3 hidden mx-auto" style="max-width: 320px; aspect-ratio: 1;"></div>
+                    </div>
+
+                    <div>
+                        <label for="{{ form.solution_uci.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Solution move (UCI, optional)</label>
+                        {{ form.solution_uci|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        <p class="mt-1 text-xs text-brand-500">E.g. <code>e2e4</code> or <code>e7e8q</code> for a promotion. Requires a FEN above.</p>
+                        {% if form.solution_uci.errors %}<p class="mt-1 text-sm text-red-600">{{ form.solution_uci.errors|first }}</p>{% endif %}
+                    </div>
+
+                    <div id="radio-fields" class="space-y-4">
+                        <p class="text-sm font-medium text-brand-700">Answer options</p>
+                        {% for option_field in option_fields %}
+                            <div>
+                                <label for="{{ option_field.id_for_label }}" class="block text-xs text-brand-500 mb-1">Option {{ forloop.counter }}</label>
+                                {{ option_field|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                                {% if option_field.errors %}<p class="mt-1 text-sm text-red-600">{{ option_field.errors|first }}</p>{% endif %}
+                            </div>
+                        {% endfor %}
+                        <div>
+                            <label for="{{ form.correct_option.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Correct option</label>
+                            {{ form.correct_option|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                            {% if form.correct_option.errors %}<p class="mt-1 text-sm text-red-600">{{ form.correct_option.errors|first }}</p>{% endif %}
+                        </div>
+                    </div>
+
+                    <div id="text-fields" class="hidden">
+                        <label for="{{ form.expected_answer.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Expected answer</label>
+                        {{ form.expected_answer|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        <p class="mt-1 text-xs text-brand-500">Answers are matched case-insensitively; extra spaces are ignored.</p>
+                        {% if form.expected_answer.errors %}<p class="mt-1 text-sm text-red-600">{{ form.expected_answer.errors|first }}</p>{% endif %}
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="submit" class="px-6 py-3 bg-brand-600 text-white font-semibold rounded-full hover:bg-brand-700 transition-colors">
+                            Submit for review
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+{% include "quiz/_chessboard_assets.html" %}
+{% endblock %}
+
+{% block extra_js %}
+{{ form.media }}
+<script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9/+esm';
+
+    // Live board preview for the FEN field.
+    const fenInput = document.getElementById("{{ form.fen.id_for_label }}");
+    const preview = document.getElementById("fen-preview");
+    let board = null;
+
+    function updatePreview() {
+        const fen = fenInput.value.trim();
+        if (!fen) {
+            preview.classList.add("hidden");
+            return;
+        }
+        preview.classList.remove("hidden");
+        const config = {
+            fen: fen,
+            orientation: fen.split(" ")[1] === "b" ? "black" : "white",
+            viewOnly: true,
+            coordinates: true,
+        };
+        if (board) {
+            board.set(config);
+        } else {
+            board = Chessground(preview, config);
+        }
+    }
+
+    fenInput.addEventListener("input", updatePreview);
+    updatePreview();
+</script>
+<script>
+    (function () {
+        var typeSelect = document.getElementById("{{ form.question_type.id_for_label }}");
+        var radioFields = document.getElementById("radio-fields");
+        var textFields = document.getElementById("text-fields");
+
+        function toggleFields() {
+            var isRadio = typeSelect.value === "radio";
+            radioFields.classList.toggle("hidden", !isRadio);
+            textFields.classList.toggle("hidden", isRadio);
+        }
+
+        typeSelect.addEventListener("change", toggleFields);
+        toggleFields();
+    })();
+</script>
+{% endblock %}

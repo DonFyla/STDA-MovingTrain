@@ -1,0 +1,57 @@
+{# Interactive board for questions with fen + solution_uci: the student plays #}
+{# a legal move, which is written as UCI into the hidden #id_answer field.    #}
+<script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9/+esm';
+    import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm';
+
+    const el = document.querySelector('.quiz-board');
+    const answerInput = document.getElementById('id_answer');
+    const status = document.getElementById('board-status');
+    const resetBtn = document.getElementById('board-reset');
+    const startFen = el.dataset.fen;
+    let chess = new Chess(startFen);
+    const sideToMove = chess.turn() === 'w' ? 'white' : 'black';
+
+    function legalDests() {
+        const dests = new Map();
+        chess.moves({ verbose: true }).forEach(function (m) {
+            if (!dests.has(m.from)) dests.set(m.from, []);
+            dests.get(m.from).push(m.to);
+        });
+        return dests;
+    }
+
+    const board = Chessground(el, {
+        fen: el.dataset.fen,
+        orientation: sideToMove,
+        coordinates: true,
+        turnColor: sideToMove,
+        movable: {
+            free: false,
+            color: sideToMove,
+            dests: legalDests(),
+            events: { after: onMove },
+        },
+        highlight: { lastMove: true },
+    });
+
+    function onMove(orig, dest) {
+        // promotion: 'q' default covers the vast majority of puzzles; chess.js
+        // ignores it for non-promotion moves.
+        const move = chess.move({ from: orig, to: dest, promotion: 'q' });
+        if (!move) return;  // shouldn't happen: dests are already legal-only
+        board.set({ fen: chess.fen() });
+        answerInput.value = orig + dest + (move.promotion || '');
+        if (status) status.textContent = 'Move selected: ' + answerInput.value + ' — press Submit.';
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            chess = new Chess(startFen);
+            board.set({ fen: startFen, turnColor: sideToMove, movable: { color: sideToMove, dests: legalDests() } });
+            answerInput.value = '';
+            if (status) status.textContent = 'Play your move on the board, then submit.';
+        });
+    }
+</script>

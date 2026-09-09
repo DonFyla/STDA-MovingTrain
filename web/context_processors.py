@@ -9,6 +9,7 @@ def navigation(request):
         {"label": "Courses", "url": "/courses/", "name": "courses"},
         {"label": "Tutors", "url": "/tutors/", "name": "tutors"},
         {"label": "Gallery", "url": "/gallery/", "name": "gallery"},
+        {"label": "Blog", "url": "/blog/", "name": "blog"},
         {"label": "Quiz", "url": "/quiz/", "name": "quiz"},
     ]
 
@@ -35,4 +36,6 @@ def seo(request):
         "GOOGLE_ADS_CONVERSION_ID": getattr(settings, "GOOGLE_ADS_CONVERSION_ID", ""),
         "GOOGLE_ADS_CONVERSION_LABEL": getattr(settings, "GOOGLE_ADS_CONVERSION_LABEL", ""),
         "CANONICAL_URL": canonical_url,
+        "GUIDE_ENABLED": getattr(settings, "GUIDE_ENABLED", True),
+        "BLOG_ALLOW_STUDENT_POSTS": getattr(settings, "BLOG_ALLOW_STUDENT_POSTS", False),
     }

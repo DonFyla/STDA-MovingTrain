@@ -7,6 +7,7 @@
     <title>{% block title %}Moving Train Chess Academy{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}World-class online chess coaching for beginners to masters. Join Moving Train Chess Academy and make your child fall in love with thinking.{% endblock %}">
     <meta name="theme-color" content="#5E5044">
+    <meta name="csrf-token" content="{{ csrf_token }}">
 
     <!-- Canonical URL -->
     <link rel="canonical" href="{% block canonical_url %}{{ CANONICAL_URL }}{% endblock %}">
@@ -88,7 +89,11 @@
     <link rel="stylesheet" href="{% static 'css/main.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-brand-50 text-brand-900 antialiased">
+<body class="bg-brand-50 text-brand-900 antialiased"
+      data-guide-enabled="{% if GUIDE_ENABLED %}true{% else %}false{% endif %}"
+      data-user-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"
+      data-is-coach="{{ user.is_coach|yesno:'true,false' }}"
+      data-dashboard-url="{% url 'accounts:dashboard' %}">
     {% if GOOGLE_TAG_MANAGER_ID %}
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ GOOGLE_TAG_MANAGER_ID }}"
@@ -117,23 +122,30 @@
                 <!-- Auth / CTA -->
                 <div class="hidden lg:flex items-center gap-3">
                     {% if user.is_authenticated %}
-                        {% if user.is_superuser %}
-                            <a href="{% url 'admin_portal:dashboard' %}" class="px-4 py-2 text-sm font-medium text-brand-700 rounded-full hover:bg-brand-100 transition-colors">
-                                Admin Portal
-                            </a>
-                        {% endif %}
-                        {% if user.is_coach %}
-                            <a href="{% url 'scheduling:coach_dashboard' %}" class="px-4 py-2 text-sm font-medium text-brand-700 rounded-full hover:bg-brand-100 transition-colors">
-                                Dashboard
-                            </a>
-                        {% else %}
-                            <a href="{% url 'accounts:dashboard' %}" class="px-4 py-2 text-sm font-medium text-brand-700 rounded-full hover:bg-brand-100 transition-colors">
-                                Dashboard
-                            </a>
-                        {% endif %}
-                        <a href="{% url 'accounts:logout' %}" class="px-4 py-2 text-sm font-medium text-brand-700 rounded-full hover:bg-brand-100 transition-colors">
-                            Logout
-                        </a>
+                        <div class="relative">
+                            <button type="button"
+                                    class="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-brand-200 hover:bg-brand-50 transition-colors"
+                                    aria-label="Account menu"
+                                    hx-on:click="document.getElementById('user-dropdown').classList.toggle('hidden')">
+                                <span class="w-8 h-8 rounded-full bg-brand-600 text-white text-sm font-semibold flex items-center justify-center">{{ user.username|first|upper }}</span>
+                                <span class="text-sm font-medium text-brand-700 max-w-[10rem] truncate">{{ user.username }}</span>
+                                <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-52 bg-white rounded-xl border border-brand-100 shadow-lg py-1 z-50">
+                                {% if user.is_superuser %}
+                                    <a href="{% url 'admin_portal:dashboard' %}" class="block px-4 py-2 text-sm text-brand-700 hover:bg-brand-50 transition-colors">Admin Portal</a>
+                                {% endif %}
+                                {% if user.is_coach %}
+                                    <a href="{% url 'scheduling:coach_dashboard' %}" class="block px-4 py-2 text-sm text-brand-700 hover:bg-brand-50 transition-colors">Dashboard</a>
+                                {% else %}
+                                    <a href="{% url 'accounts:dashboard' %}" class="block px-4 py-2 text-sm text-brand-700 hover:bg-brand-50 transition-colors">Dashboard</a>
+                                {% endif %}
+                                <a href="{% url 'quiz:feed' %}" class="block px-4 py-2 text-sm text-brand-700 hover:bg-brand-50 transition-colors">Feed</a>
+                                <a href="{% url 'quiz:leaderboard_index' %}" class="block px-4 py-2 text-sm text-brand-700 hover:bg-brand-50 transition-colors">Leaderboard</a>
+                                <div class="border-t border-brand-100 my-1"></div>
+                                <a href="{% url 'accounts:logout' %}" class="block px-4 py-2 text-sm text-brand-700 hover:bg-brand-50 transition-colors">Logout</a>
+                            </div>
+                        </div>
                     {% else %}
                         <a href="{% url 'accounts:login' %}" class="px-4 py-2 text-sm font-medium text-brand-700 rounded-full hover:bg-brand-100 transition-colors">
                             Login
@@ -184,6 +196,12 @@
                             Dashboard
                         </a>
                     {% endif %}
+                    <a href="{% url 'quiz:feed' %}" class="block px-4 py-3 text-base font-medium rounded-xl text-brand-700 hover:bg-brand-100 transition-colors">
+                        Feed
+                    </a>
+                    <a href="{% url 'quiz:leaderboard_index' %}" class="block px-4 py-3 text-base font-medium rounded-xl text-brand-700 hover:bg-brand-100 transition-colors">
+                        Leaderboard
+                    </a>
                     <a href="{% url 'accounts:logout' %}" class="block px-4 py-3 text-base font-medium rounded-xl text-brand-700 hover:bg-brand-100 transition-colors">
                         Logout
                     </a>
@@ -292,6 +310,7 @@
     </footer>
 
     <script src="{% static 'js/htmx.min.js' %}" defer></script>
+    <script src="{% static 'js/booking-guide.js' %}" defer></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

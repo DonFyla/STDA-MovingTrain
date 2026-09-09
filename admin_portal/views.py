@@ -227,6 +227,9 @@ def coach_edit_view(request, coach_id):
         coach.rank_title = request.POST.get("rank_title", "").strip()
         coach.meeting_link = request.POST.get("meeting_link", "").strip()
         coach.photo_url = request.POST.get("photo_url", "").strip()
+        photo = request.FILES.get("photo")
+        if photo:
+            coach.photo = photo
         coach.hourly_rate = _parse_int(request.POST.get("hourly_rate"), default=coach.hourly_rate) or None
         coach.points_cost = _parse_int(request.POST.get("points_cost"), default=coach.points_cost or 1) or 1
         coach.featured_order = request.POST.get("featured_order", "").strip() or None

@@ -1,0 +1,7 @@
+{# Renders a read-only chessboard for question.fen. Requires the chessboard #}
+{# assets block (quiz/_chessboard_assets.html) to be loaded by the page.    #}
+{% if question.fen %}
+    <div class="mb-6 flex justify-center">
+        <div class="quiz-board" data-fen="{{ question.fen }}" style="width: 100%; max-width: 400px; aspect-ratio: 1;"></div>
+    </div>
+{% endif %}

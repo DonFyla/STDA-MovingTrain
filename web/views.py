@@ -8,7 +8,6 @@ from .data import (
     COURSES,
     TESTIMONIALS,
     COURSE_CURRICULA,
-    COURSE_TUTORS,
 )
 
 
@@ -42,13 +41,32 @@ def gallery(request):
     return render(request, "web/gallery.html", {"gallery": GALLERY, "events": EVENTS})
 
 
+def _coach_initials(name):
+    parts = [p for p in name.split() if p]
+    if not parts:
+        return "??"
+    if len(parts) == 1:
+        return parts[0][0].upper()
+    return (parts[0][0] + parts[1][0]).upper()
+
+
 def course_detail(request, slug):
     course = COURSE_CURRICULA.get(slug)
     if not course:
         raise Http404("Course not found")
+
+    colors = ["violet", "blue", "emerald", "pink", "amber", "purple", "orange"]
+    instructors = []
+    for index, coach in enumerate(Coach.objects.all().order_by("featured_order", "name")):
+        instructors.append({
+            "coach": coach,
+            "initials": _coach_initials(coach.name),
+            "color": colors[index % len(colors)],
+        })
+
     context = {
         "course": course,
-        "tutors": COURSE_TUTORS,
+        "instructors": instructors,
         "slug": slug,
     }
     return render(request, "web/course_detail.html", context)

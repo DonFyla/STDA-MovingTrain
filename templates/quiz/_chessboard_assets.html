@@ -1,0 +1,8 @@
+{# Chessground CDN assets + the project's board theme overrides.             #}
+{# Include once per page inside {% block extra_css %} — after this, the     #}
+{# quiz/_chessboard*.html partials can render any .quiz-board element.      #}
+{% load static %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.base.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.brown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.cburnett.css">
+<link rel="stylesheet" href="{% static 'css/chessboard.css' %}">

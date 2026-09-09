@@ -1,11 +1,21 @@
 from datetime import datetime, time
 from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
+from django.core import signing
+from django.http import JsonResponse
+from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
-from .forms import CustomUserCreationForm
+from .emails import send_verification_email
+from .forms import CustomUserCreationForm, ProfileUpdateForm, StudentProfileForm
+from .models import User
+from .tokens import email_verification_token
 
 
 RATELIMIT_GROUP = "accounts"
@@ -55,17 +65,69 @@ def logout_view(request):
 
 
 @ratelimit(key="ip", rate="5/m", method="POST", block=True)
+@ratelimit(key="ip", rate="10/d", method="POST", block=True)
 def signup_view(request):
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
-            user = form.save()
+            user = form.save(commit=False)
+            user.is_active = False
+            user.save()
             _create_profile_for_user(user)
-            login(request, user)
-            return redirect(_get_dashboard_url(user))
+            _send_verification_link(request, user)
+            return redirect("accounts:signup_done")
     else:
-        form = CustomUserCreationForm()
+        form = CustomUserCreationForm(
+            initial={"form_ts": signing.dumps(str(timezone.now().timestamp()))}
+        )
     return render(request, "accounts/signup.html", {"form": form})
+
+
+def _send_verification_link(request, user):
+    """Build the verification URL and email it to the user."""
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = email_verification_token.make_token(user)
+    verify_url = request.build_absolute_uri(
+        reverse("accounts:verify_email", args=[uid, token])
+    )
+    send_verification_email(user, verify_url)
+
+
+def signup_done(request):
+    return render(request, "accounts/signup_done.html")
+
+
+def verify_email(request, uidb64, token):
+    try:
+        uid = urlsafe_base64_decode(uidb64).decode()
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if user is not None and user.is_active:
+        messages.info(request, "Your email is already verified. You can log in.")
+        return redirect("accounts:login")
+
+    if user is not None and email_verification_token.check_token(user, token):
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+        login(request, user)
+        return redirect(_get_dashboard_url(user))
+
+    return render(request, "accounts/verify_email_invalid.html")
+
+
+@ratelimit(key="ip", rate="3/m", method="POST", block=True)
+def resend_verification(request):
+    sent = False
+    if request.method == "POST":
+        email = request.POST.get("email", "").strip()
+        user = User.objects.filter(email__iexact=email, is_active=False).first()
+        if user is not None:
+            _send_verification_link(request, user)
+        # Always show the same confirmation to avoid leaking which emails exist.
+        sent = True
+    return render(request, "accounts/resend_verification.html", {"sent": sent})
 
 
 def _create_profile_for_user(user):
@@ -97,7 +159,8 @@ def dashboard_view(request):
 
     # Student dashboard
     from scheduling.models import Booking, FlexibleBooking, SpecialBooking
-    from quiz.models import Qtaker
+    from quiz.models import Qtaker, Questionnaire, QuestionResult, Badge
+    from quiz.proficiency import get_proficiency
     from payments.points_service import get_balance
 
     bookings = Booking.objects.filter(student_email=user.email).order_by("-created_at")
@@ -142,6 +205,35 @@ def dashboard_view(request):
     upcoming_sessions.sort(key=lambda s: (s["session_date"], s["start_time"] or time.min))
 
     quiz_history = Qtaker.objects.filter(email=user.email).order_by("-date_taken")[:5]
+    for attempt in quiz_history:
+        # Motif quizzes carry the default skill, so derive the label from the
+        # questionnaire that was actually taken (via its recorded results).
+        first_result = (
+            QuestionResult.objects.filter(qtaker=attempt, question__isnull=False)
+            .select_related("question__questionnaire")
+            .first()
+        )
+        if first_result:
+            attempt.quiz_label = first_result.question.questionnaire.title
+        else:
+            attempt.quiz_label = f"{attempt.skill} level"
+
+    # Motif quizzes that actually have approved questions, grouped by motif label.
+    level_order = {"easy": 0, "medium": 1, "hard": 2}
+    motif_questionnaires = sorted(
+        Questionnaire.objects.exclude(motif="").exclude(difficulty="")
+        .filter(question__is_approved=True)
+        .distinct(),
+        key=lambda q: (q.motif, level_order.get(q.difficulty, 99)),
+    )
+    motif_quizzes = {}
+    for questionnaire in motif_questionnaires:
+        motif_quizzes.setdefault(questionnaire.get_motif_display(), []).append(questionnaire)
+
+    earned_badges = user.badges.select_related("badge").order_by("-awarded_at")
+    locked_badges = Badge.objects.exclude(
+        id__in=[award.badge_id for award in earned_badges]
+    )
 
     context = {
         "user": user,
@@ -157,5 +249,64 @@ def dashboard_view(request):
         "upcoming_sessions": upcoming_sessions,
         "user_balance": get_balance(user),
         "quiz_history": quiz_history,
+        "motif_quizzes": motif_quizzes,
+        "proficiency": get_proficiency(user),
+        "earned_badges": earned_badges,
+        "locked_badges": locked_badges,
     }
     return render(request, "accounts/dashboard_student.html", context)
+
+
+@login_required
+@require_POST
+@ratelimit(key="ip", rate="10/m", method="POST", block=True)
+def mark_tour_seen(request):
+    """Persist or reset the user's role-specific onboarding tour state."""
+    user = request.user
+    tour = request.POST.get("tour", "")
+    seen = request.POST.get("seen", "true").lower() == "true"
+
+    if tour == "student" and not user.is_coach:
+        user.student_tour_seen = seen
+        user.save(update_fields=["student_tour_seen"])
+    elif tour == "coach" and user.is_coach:
+        user.coach_tour_seen = seen
+        user.save(update_fields=["coach_tour_seen"])
+    else:
+        return JsonResponse(
+            {"success": False, "error": "Invalid tour for this user."},
+            status=400,
+        )
+
+    return JsonResponse({"success": True, "tour": tour, "seen": seen})
+
+
+@login_required
+def profile_edit(request):
+    """Edit the student's account and scheduling profile fields."""
+    user = request.user
+    if user.is_coach:
+        messages.info(request, "Edit your profile from the coach dashboard.")
+        return redirect("scheduling:coach_dashboard")
+
+    from scheduling.models import Student
+
+    student_profile, _ = Student.objects.get_or_create(user=user)
+
+    if request.method == "POST":
+        user_form = ProfileUpdateForm(request.POST, instance=user)
+        profile_form = StudentProfileForm(request.POST, instance=student_profile)
+        if user_form.is_valid() and profile_form.is_valid():
+            user_form.save()
+            profile_form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("accounts:profile_edit")
+    else:
+        user_form = ProfileUpdateForm(instance=user)
+        profile_form = StudentProfileForm(instance=student_profile)
+
+    return render(
+        request,
+        "accounts/profile_edit.html",
+        {"user_form": user_form, "profile_form": profile_form},
+    )

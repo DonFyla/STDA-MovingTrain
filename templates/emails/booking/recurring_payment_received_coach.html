@@ -1,0 +1,11 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Hi {{ coach.name }},</h2>
+
+<p>The monthly subscription payment of <strong>₦{{ booking.monthly_amount|floatformat:0 }}</strong> from <strong>{{ student }}</strong> has been received.</p>
+
+<p>Next billing date: <strong>{{ booking.next_billing_date|date:"F j, Y" }}</strong></p>
+
+<p>— Moving Train Chess Academy</p>
+{% endblock %}

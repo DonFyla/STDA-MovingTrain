@@ -393,6 +393,34 @@ class AdminPortalCoachesTests(TestCase):
         self.assertEqual(self.coach.photo_url, "https://example.com/new.jpg")
         self.assertEqual(self.coach.bio, "Updated bio")
 
+    def test_coach_edit_can_upload_photo(self):
+        import base64
+        import shutil
+        import tempfile
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+
+        png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, True)
+
+        with override_settings(MEDIA_ROOT=media_root):
+            self.client.force_login(self.admin)
+            response = self.client.post(
+                reverse("admin_portal:coach_edit", args=[self.coach.id]),
+                {
+                    "name": self.coach.name,
+                    "photo": SimpleUploadedFile("photo.png", png, content_type="image/png"),
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+            self.coach.refresh_from_db()
+            self.assertTrue(self.coach.photo.name.startswith("coaches/"))
+            self.assertTrue(self.coach.photo.name.endswith(".png"))
+
     def test_coach_edit_can_add_blocked_date(self):
         self.client.force_login(self.admin)
         response = self.client.post(

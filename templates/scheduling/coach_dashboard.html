@@ -7,26 +7,42 @@
 {% block title %}Coach Dashboard - Moving Train Chess Academy{% endblock %}
 
 {% block content %}
-<section class="min-h-screen bg-brand-50 pb-16">
+<section class="min-h-screen bg-brand-50 pb-16" data-guide-page="coach_dashboard"
+         data-tour-seen="{{ user.coach_tour_seen|yesno:'true,false' }}"
+         data-mark-tour-seen-url="{% url 'accounts:mark_tour_seen' %}">
     <!-- Header -->
-    <header class="bg-white border-b border-brand-100">
+    <header class="bg-white border-b border-brand-100" data-tour="coach-header">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 class="text-3xl font-bold text-brand-900">Coach Dashboard</h1>
                     <p class="mt-1 text-brand-600">Welcome back, {{ coach.name|default:request.user.email }}</p>
                 </div>
-                <a href="{% url 'home' %}" class="inline-flex items-center text-sm font-medium text-brand-700 hover:text-brand-900">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Back to Home
-                </a>
+                <div class="flex items-center gap-4">
+                    <a href="{% url 'scheduling:student_notes' %}" class="inline-flex items-center text-sm font-medium text-brand-700 hover:text-brand-900">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                        Student Notes
+                    </a>
+                    <a href="{% url 'quiz:submit_question' %}" class="inline-flex items-center text-sm font-medium text-brand-700 hover:text-brand-900">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Submit Quiz Question
+                    </a>
+                    <a href="{% url 'blog:my_posts' %}" class="inline-flex items-center text-sm font-medium text-brand-700 hover:text-brand-900">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        My Blog Posts
+                    </a>
+                    <a href="{% url 'home' %}" class="inline-flex items-center text-sm font-medium text-brand-700 hover:text-brand-900">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        Back to Home
+                    </a>
+                </div>
             </div>
         </div>
     </header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Tabs -->
-        <div class="mb-8">
+        <div class="mb-8" data-tour="coach-tabs">
             <div class="inline-flex p-1 bg-white rounded-xl border border-brand-200 shadow-sm">
                 <button type="button" onclick="switchTab('schedule')" id="tab-schedule" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white">
                     <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -45,7 +61,7 @@
                 <!-- Left Column -->
                 <div class="space-y-8">
                     <!-- Meeting Link Card -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-meeting-link">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
@@ -70,7 +86,7 @@
                     </div>
 
                     <!-- Effective Availability Preview -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-availability-preview">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -111,7 +127,7 @@
                     </div>
 
                     <!-- Pending Bookings -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-pending-bookings">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -191,7 +207,7 @@
                     </div>
 
                     <!-- Upcoming Bookings -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-confirmed-bookings">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -333,7 +349,7 @@
                 <!-- Right Column -->
                 <div class="space-y-8">
                     <!-- Weekly Availability -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-weekly-availability">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -356,9 +372,19 @@
                                     <label for="{{ availability_form.end_time.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">End</label>
                                     {{ availability_form.end_time|add_class:"w-32 px-3 py-2.5 rounded-lg border border-brand-200 bg-white focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none" }}
                                 </div>
+                                <div>
+                                    <label for="{{ availability_form.slot_duration.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Slot length</label>
+                                    {{ availability_form.slot_duration|add_class:"w-40 px-3 py-2.5 rounded-lg border border-brand-200 bg-white focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none" }}
+                                </div>
+                                <div class="flex items-center gap-2 pb-3">
+                                    {{ availability_form.split_into_slots|add_class:"w-5 h-5 text-brand-600 rounded border-brand-300 focus:ring-brand-500" }}
+                                    <label for="{{ availability_form.split_into_slots.id_for_label }}" class="text-sm font-medium text-brand-700">
+                                        {{ availability_form.split_into_slots.label }}
+                                    </label>
+                                </div>
                                 <button type="submit" class="px-5 py-2.5 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-700 transition-colors flex items-center gap-2">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                                    Add Slot
+                                    Add Slot(s)
                                 </button>
                             </form>
 
@@ -394,7 +420,7 @@
                     </div>
 
                     <!-- Block Dates -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-brand-100 overflow-hidden" data-tour="coach-block-dates">
                         <div class="px-6 py-4 border-b border-brand-100 flex items-center gap-3">
                             <div class="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-700">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
