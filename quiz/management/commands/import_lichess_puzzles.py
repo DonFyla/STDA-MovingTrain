@@ -119,16 +119,20 @@ class Command(BaseCommand):
     def _get_questionnaire(self, motif, difficulty, creator):
         motif_label = dict(Questionnaire.QUESTION_MOTIFS)[motif]
         difficulty_label = dict(Questionnaire.QUESTION_GRADES)[difficulty]
-        questionnaire, created = Questionnaire.objects.get_or_create(
-            motif=motif,
-            difficulty=difficulty,
-            defaults={
-                "title": f"{motif_label} — {difficulty_label}",
-                "description": f"Lichess puzzles: {motif_label} ({difficulty_label}).",
-                "created_by": creator,
-            },
+        # Databases seeded from dumps may hold duplicate (motif, difficulty)
+        # rows; get_or_create would raise MultipleObjectsReturned, so take the
+        # oldest and only create when none exists.
+        questionnaire = (
+            Questionnaire.objects.filter(motif=motif, difficulty=difficulty).order_by("id").first()
         )
-        if created:
+        if questionnaire is None:
+            questionnaire = Questionnaire.objects.create(
+                title=f"{motif_label} — {difficulty_label}",
+                description=f"Lichess puzzles: {motif_label} ({difficulty_label}).",
+                motif=motif,
+                difficulty=difficulty,
+                created_by=creator,
+            )
             self.stdout.write(f"Created questionnaire '{questionnaire.title}'.")
         return questionnaire
 
