@@ -331,15 +331,23 @@ def _prepare_next_session(qtaker, questionnaire):
 
 
 def _get_session_questionnaire(qtaker):
-    """The questionnaire this session drew its questions from, if identifiable."""
+    """The questionnaire this session drew its questions from, if identifiable.
+
+    Results accumulate on a qtaker across sessions (a passed quiz queues the
+    next session on the same qtaker), so restrict the lookup to results whose
+    questions belong to the current session — otherwise passing medium would
+    read the questionnaire of the previous (easy) session and offer medium
+    again."""
+    current = qtaker.current_question_set or []
     first_result = (
-        QuestionResult.objects.filter(qtaker=qtaker, question__isnull=False)
+        QuestionResult.objects.filter(
+            qtaker=qtaker, question__isnull=False, question_id__in=current
+        )
         .select_related("question__questionnaire")
         .first()
     )
     if first_result:
         return first_result.question.questionnaire
-    current = qtaker.current_question_set or []
     if current:
         question = Question.objects.filter(id=current[0]).select_related("questionnaire").first()
         if question:

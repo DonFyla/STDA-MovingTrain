@@ -950,6 +950,34 @@ class MotifProgressionTests(TestCase):
         qtaker = self._pass_quiz(pins_hard, hard_question)
         self.assertEqual(qtaker.next_question_set, [])
 
+    def test_passing_medium_after_easy_offers_hard(self):
+        """Regression: results accumulate on the qtaker across sessions, so the
+        session questionnaire must be derived from the current session only —
+        not from the first result ever recorded (the easy session)."""
+        pins_hard = Questionnaire.objects.create(
+            title="Pins — Hard", description="", motif="pins",
+            difficulty="hard", created_by=self.user,
+        )
+        hard_question = Question.objects.create(
+            questionnaire=pins_hard, question="Hard pin", question_type="text",
+            placement=1, created_by=self.user, is_approved=True,
+        )
+        Options.objects.create(question=hard_question, text="Rh8", correct=True)
+
+        # Pass easy — the result page queues medium on this same qtaker.
+        qtaker = self._pass_quiz(self.pins_easy, self.easy_question)
+        self.assertEqual(qtaker.next_question_set, [self.medium_question.id])
+
+        # Take the queued medium session on the SAME qtaker and pass it.
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, self.medium_question.id]),
+            {"answer": Options.objects.get(question=self.medium_question, correct=True).text},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.client.get(reverse("quiz:result", args=[qtaker.id]))
+        qtaker.refresh_from_db()
+        self.assertEqual(qtaker.next_question_set, [hard_question.id])
+
 
 class FeedTests(TestCase):
     """Activity feed: badge awards + first-time level-ups."""
