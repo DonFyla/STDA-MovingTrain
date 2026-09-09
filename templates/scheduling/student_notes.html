@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Student Notes - Moving Train Chess Academy{% endblock %}
+
+{% block content %}
+<section class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+                <h1 class="text-2xl lg:text-3xl font-bold text-brand-900">Student Notes</h1>
+                <p class="text-brand-600 mt-1">Session history per student — what each coach has taught, so any coach can pick up where another left off.</p>
+            </div>
+        </div>
+
+        <form method="get" class="mb-6 flex gap-2">
+            <input type="text" name="q" value="{{ q }}" placeholder="Search by username, name, or email…"
+                   class="flex-1 px-4 py-2 border border-brand-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-300">
+            <button type="submit" class="px-5 py-2 text-sm font-medium text-white bg-brand-600 rounded-full hover:bg-brand-700 transition-colors">Search</button>
+        </form>
+
+        <div class="card overflow-hidden">
+            {% if students %}
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-brand-50 text-brand-700 text-left">
+                            <th class="px-4 py-3 font-semibold">Student</th>
+                            <th class="px-4 py-3 font-semibold">Name</th>
+                            <th class="px-4 py-3 font-semibold text-right">Notes</th>
+                            <th class="px-4 py-3 font-semibold text-right">Last Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                            <tr class="border-t border-brand-100 hover:bg-brand-50/50">
+                                <td class="px-4 py-3">
+                                    <a href="{% url 'scheduling:student_note_detail' user_id=student.id %}" class="font-semibold text-brand-700 hover:text-brand-900">
+                                        {{ student.username }}
+                                    </a>
+                                </td>
+                                <td class="px-4 py-3 text-brand-900">{{ student.full_name|default:"—" }}</td>
+                                <td class="px-4 py-3 text-right text-brand-900">{{ student.notes_count }}</td>
+                                <td class="px-4 py-3 text-right text-brand-500">
+                                    {% if student.last_note_date %}{{ student.last_note_date|date:"M j, Y" }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="p-8 text-center text-brand-600">
+                    {% if q %}
+                        No students match “{{ q }}”.
+                    {% else %}
+                        No students with notes or bookings yet. Notes can be added from any student's detail page once they exist.
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

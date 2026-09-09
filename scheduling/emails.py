@@ -227,3 +227,30 @@ def send_recurring_payment_received(booking):
             template_name="emails/booking/recurring_payment_received_coach.html",
             context=context,
         )
+
+
+def send_session_reminder(*, student_name, student_email, coach, session_date, start_time, end_time, meeting_link=""):
+    """1-hour-before reminder to the student and the coach about an upcoming session."""
+    context = {
+        "student_name": student_name,
+        "coach": coach,
+        "session_date": session_date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "meeting_link": meeting_link,
+    }
+
+    _send_email(
+        subject=f"Reminder: session with {coach.name} in 1 hour",
+        to_emails=student_email,
+        template_name="emails/booking/session_reminder_student.html",
+        context=context,
+    )
+
+    if coach.email:
+        _send_email(
+            subject=f"Reminder: session with {student_name} in 1 hour",
+            to_emails=coach.email,
+            template_name="emails/booking/session_reminder_coach.html",
+            context=context,
+        )

@@ -73,6 +73,28 @@ services:
       retries: 3
       start_period: 30s
 
+  reminders:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: >
+      sh -c "while true; do python manage.py send_session_reminders; sleep 300; done"
+    env_file:
+      - .env
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
     ports:

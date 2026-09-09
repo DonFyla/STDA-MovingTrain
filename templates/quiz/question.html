@@ -6,7 +6,14 @@
 <section class="container mx-auto px-6 py-16">
     <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-8">
         <div class="flex justify-between items-center mb-6">
+            {% if question.questionnaire.motif %}
+            <span class="text-sm font-medium text-[#5E5044]">
+                Motif: {{ question.questionnaire.get_motif_display }}
+                {% if question.questionnaire.difficulty %}&middot; {{ question.questionnaire.get_difficulty_display }}{% endif %}
+            </span>
+            {% else %}
             <span class="text-sm font-medium text-[#5E5044]">Skill: {{ qtaker.get_skill_display }}</span>
+            {% endif %}
             <span class="text-sm text-gray-500">Question {{ progress.current }} of {{ progress.total }}</span>
         </div>
 
@@ -56,9 +63,7 @@
 
 {% block extra_css %}
 {% if question.fen %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.base.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.brown.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.cburnett.css">
+{% include "quiz/_chessboard_assets.html" %}
 {% endif %}
 {% endblock %}
 

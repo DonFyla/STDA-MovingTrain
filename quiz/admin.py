@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.safestring import mark_safe
-from .models import Qtaker, Question, Questionnaire, Options, QuestionResult, Badge, UserBadge
+from .models import Qtaker, Question, Questionnaire, Options, QuestionResult, Badge, UserBadge, Activity
 
 
 @admin.register(Qtaker)
@@ -57,3 +57,10 @@ class BadgeAdmin(admin.ModelAdmin):
 class UserBadgeAdmin(admin.ModelAdmin):
     list_display = ["user", "badge", "awarded_at"]
     list_filter = ["badge"]
+
+
+@admin.register(Activity)
+class ActivityAdmin(admin.ModelAdmin):
+    list_display = ["user", "kind", "text", "created_at"]
+    list_filter = ["kind"]
+    readonly_fields = ["user", "kind", "badge", "text", "created_at"]

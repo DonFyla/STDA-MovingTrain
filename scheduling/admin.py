@@ -7,6 +7,7 @@ from .models import (
     FlexibleBooking,
     SpecialBooking,
     CoachBlockedDate,
+    SessionNote,
 )
 
 
@@ -133,3 +134,11 @@ class StudentAdmin(admin.ModelAdmin):
 class CoachBlockedDateAdmin(admin.ModelAdmin):
     list_display = ["coach", "blocked_date", "start_time", "end_time", "reason"]
     list_filter = ["coach", "blocked_date"]
+
+
+@admin.register(SessionNote)
+class SessionNoteAdmin(admin.ModelAdmin):
+    list_display = ["student", "coach", "session_date", "created_at"]
+    list_filter = ["coach", "session_date"]
+    search_fields = ["student__email", "student__full_name", "content"]
+    readonly_fields = ["created_at", "updated_at"]

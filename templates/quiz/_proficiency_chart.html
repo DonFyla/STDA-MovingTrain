@@ -1,0 +1,59 @@
+{# Self-contained proficiency bar chart. Requires a `proficiency` context var #}
+{# (quiz.proficiency.get_proficiency) and renders its own Chart.js assets, so  #}
+{# it works inside any page without extra_js wiring. One chart per page — the  #}
+{# element/json ids are fixed. #}
+<div class="relative h-64 sm:h-72">
+    <canvas id="proficiencyChart"></canvas>
+</div>
+{{ proficiency|json_script:"proficiency-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+(function () {
+    const data = JSON.parse(document.getElementById('proficiency-data').textContent);
+    const levelLabels = ['Not started', 'Easy', 'Medium', 'Hard'];
+    // Medal palette matching the badge icons: none / bronze / silver / gold.
+    const barColors = ['#E9E2D9', '#B08968', '#9CA3AF', '#C9A227'];
+    new Chart(document.getElementById('proficiencyChart'), {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.label),
+            datasets: [{
+                data: data.map(d => d.level_value),
+                backgroundColor: data.map(d => barColors[d.level_value]),
+                borderRadius: 8,
+                maxBarThickness: 56,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            const d = data[ctx.dataIndex];
+                            if (!d.attempts) return 'Not attempted yet';
+                            const level = d.level ? levelLabels[d.level_value] + ' level achieved' : 'No level passed yet';
+                            return level + ' · ' + d.attempts + ' quiz(zes) · best ' + d.best_score + '%';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    min: 0,
+                    max: 3,
+                    grid: { color: '#F3EEE8' },
+                    ticks: {
+                        stepSize: 1,
+                        color: '#8A7D70',
+                        callback: function (v) { return levelLabels[v]; }
+                    }
+                }
+            }
+        }
+    });
+})();
+</script>

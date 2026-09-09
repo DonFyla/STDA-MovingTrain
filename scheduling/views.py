@@ -9,7 +9,9 @@ from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.db import transaction
 from django.utils import timezone
-from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking
+from django.contrib.auth import get_user_model
+from django.db.models import Q, Count, Max
+from .models import Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking, Booking, FlexibleBooking, SessionNote
 from .forms import (
     BookingForm,
     CoachProfileForm,
@@ -18,6 +20,7 @@ from .forms import (
     CoachBlockedDateForm,
     PointsBookingForm,
     SpecialBookingForm,
+    SessionNoteForm,
 )
 from .emails import (
     send_recurring_booking_created,
@@ -766,3 +769,84 @@ def special_booking_confirmation_view(request, booking_id):
     ):
         raise PermissionDenied
     return render(request, "scheduling/special_booking_confirmation.html", {"booking": booking})
+
+
+def _coached_students(q=""):
+    """Students a coach may write notes about: any user linked to a coach via
+    session notes or any booking channel (Booking by email, FlexibleBooking /
+    SpecialBooking by FK). Distinct, annotated with note stats, searchable."""
+    User = get_user_model()
+    users = User.objects.filter(
+        Q(session_notes__isnull=False)
+        | Q(flexible_bookings__isnull=False)
+        | Q(special_bookings__isnull=False)
+        | Q(email__in=Booking.objects.values_list("student_email", flat=True))
+    ).distinct().annotate(
+        notes_count=Count("session_notes", distinct=True),
+        last_note_date=Max("session_notes__session_date"),
+    ).order_by("username")
+    if q:
+        users = users.filter(
+            Q(username__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(full_name__icontains=q)
+            | Q(email__icontains=q)
+        )
+    return users
+
+
+@login_required
+def student_notes_view(request):
+    """Coach-only list of students with note history / booking linkage."""
+    if not request.user.is_coach:
+        messages.error(request, "Only coach accounts can access student notes.")
+        return redirect("accounts:dashboard")
+    q = request.GET.get("q", "").strip()
+    return render(
+        request,
+        "scheduling/student_notes.html",
+        {"students": _coached_students(q), "q": q},
+    )
+
+
+@login_required
+def student_note_detail_view(request, user_id):
+    """Coach-only view of one student's full note history + proficiency chart,
+    with a form to append a new note. Append-and-keep: existing notes are
+    never edited or deleted, so a new coach taking the student sees
+    everything the previous coaches taught (design doc §6.1)."""
+    if not request.user.is_coach:
+        messages.error(request, "Only coach accounts can access student notes.")
+        return redirect("accounts:dashboard")
+    student = get_object_or_404(get_user_model(), pk=user_id)
+    try:
+        coach_profile = request.user.coach_profile
+    except Coach.DoesNotExist:
+        messages.error(request, "Your account has no coach profile.")
+        return redirect("scheduling:coach_dashboard")
+
+    if request.method == "POST":
+        form = SessionNoteForm(request.POST)
+        if form.is_valid():
+            note = form.save(commit=False)
+            note.coach = coach_profile
+            note.student = student
+            note.save()
+            messages.success(request, "Session note added.")
+            return redirect("scheduling:student_note_detail", user_id=student.id)
+    else:
+        form = SessionNoteForm()
+
+    from quiz.proficiency import get_proficiency  # local: quiz imports this module's app
+
+    return render(
+        request,
+        "scheduling/student_note_detail.html",
+        {
+            "student": student,
+            "notes": student.session_notes.select_related("coach"),
+            "form": form,
+            "proficiency": get_proficiency(student),
+        },
+    )

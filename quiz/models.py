@@ -144,3 +144,28 @@ class UserBadge(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.badge}"
+
+
+class Activity(models.Model):
+    """One feed event (badge earned, level up). Text is frozen at write time —
+    templates render it verbatim. Design ref: docs/chess-proficiency-design.md §6.2."""
+    KINDS = [
+        ("badge", "Badge earned"),
+        ("level_up", "Level up"),
+    ]
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="activities",
+    )
+    kind = models.CharField(choices=KINDS, max_length=20)
+    badge = models.ForeignKey(Badge, on_delete=models.SET_NULL, null=True, blank=True)
+    text = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["-created_at"])]
+
+    def __str__(self):
+        return f"{self.user.username}: {self.text}"

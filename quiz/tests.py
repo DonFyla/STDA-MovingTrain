@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from .models import Questionnaire, Question, Options, Qtaker, QuestionResult, Badge, UserBadge
+from .models import Questionnaire, Question, Options, Qtaker, QuestionResult, Badge, UserBadge, Activity
 from .proficiency import get_proficiency
 from .views import _build_session
 
@@ -949,3 +949,148 @@ class MotifProgressionTests(TestCase):
         Options.objects.create(question=hard_question, text="Rh8", correct=True)
         qtaker = self._pass_quiz(pins_hard, hard_question)
         self.assertEqual(qtaker.next_question_set, [])
+
+
+class FeedTests(TestCase):
+    """Activity feed: badge awards + first-time level-ups."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="feeder", password="testpass", email="feeder@example.com"
+        )
+        self.questionnaire = Questionnaire.objects.create(
+            title="Pins — Easy", description="", motif="pins", difficulty="easy",
+            created_by=self.user,
+        )
+        self.question = Question.objects.create(
+            questionnaire=self.questionnaire, question="Easy pin", question_type="text",
+            placement=1, created_by=self.user, is_approved=True,
+        )
+        Options.objects.create(question=self.question, text="Bd5", correct=True)
+
+    def _pass(self):
+        qtaker = Qtaker.objects.create(name="P", email="feeder@example.com", user=self.user)
+        qtaker.current_question_set = [self.question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, self.question.id]),
+            {"answer": "Bd5"},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.client.get(reverse("quiz:result", args=[qtaker.id]))
+
+    def test_first_pass_writes_badge_and_level_up(self):
+        self._pass()
+        self.assertEqual(
+            sorted(Activity.objects.values_list("kind", flat=True)), ["badge", "level_up"]
+        )
+
+    def test_retake_writes_no_new_events(self):
+        self._pass()
+        self._pass()
+        self.assertEqual(Activity.objects.count(), 2)
+
+    def test_level_up_only_on_first_pass_of_pair(self):
+        self._pass()
+        self._pass()
+        level_ups = Activity.objects.filter(kind="level_up")
+        self.assertEqual(level_ups.count(), 1)
+        self.assertIn("first time", level_ups.get().text)
+
+    def test_feed_requires_login(self):
+        response = self.client.get(reverse("quiz:feed"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_feed_shows_username_and_text(self):
+        self._pass()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("quiz:feed"))
+        self.assertContains(response, "feeder")
+        self.assertContains(response, "earned the")
+        self.assertContains(response, "first time")
+
+
+class LeaderboardTests(TestCase):
+    """Per-motif leaderboard: level desc, then best score, then fewest attempts."""
+
+    def setUp(self):
+        self.creator = User.objects.create_user(
+            username="lb-creator", password="testpass", email="lbc@example.com"
+        )
+        self.pins_easy = Questionnaire.objects.create(
+            title="Pins — Easy", description="", motif="pins", difficulty="easy",
+            created_by=self.creator,
+        )
+        self.easy_question = Question.objects.create(
+            questionnaire=self.pins_easy, question="Easy pin", question_type="text",
+            placement=1, created_by=self.creator, is_approved=True,
+        )
+        Options.objects.create(question=self.easy_question, text="Bd5", correct=True)
+        self.pins_hard = Questionnaire.objects.create(
+            title="Pins — Hard", description="", motif="pins", difficulty="hard",
+            created_by=self.creator,
+        )
+        self.hard_question = Question.objects.create(
+            questionnaire=self.pins_hard, question="Hard pin", question_type="text",
+            placement=1, created_by=self.creator, is_approved=True,
+        )
+        Options.objects.create(question=self.hard_question, text="Rh8", correct=True)
+
+    def _pass(self, user, questionnaire, question):
+        qtaker = Qtaker.objects.create(
+            name=user.username, email=user.email, user=user
+        )
+        qtaker.current_question_set = [question.id]
+        qtaker.save()
+        self.client.force_login(user)
+        self.client.post(
+            reverse("quiz:question", args=[qtaker.id, question.id]),
+            {"answer": Options.objects.get(question=question, correct=True).text},
+        )
+        self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.client.get(reverse("quiz:result", args=[qtaker.id]))
+
+    def test_requires_login(self):
+        response = self.client.get(reverse("quiz:leaderboard", args=["pins"]))
+        self.assertEqual(response.status_code, 302)
+
+    def test_unknown_motif_404(self):
+        user = User.objects.create_user(username="u1", password="testpass", email="u1@x.com")
+        self.client.force_login(user)
+        response = self.client.get(reverse("quiz:leaderboard", args=["not_a_motif"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_ranked_by_level_then_attempts(self):
+        alice = User.objects.create_user(username="alice", password="p", email="a@x.com")
+        bob = User.objects.create_user(username="bob", password="p", email="b@x.com")
+        carol = User.objects.create_user(username="carol", password="p", email="c@x.com")
+        self._pass(alice, self.pins_hard, self.hard_question)
+        self._pass(bob, self.pins_easy, self.easy_question)
+        self._pass(carol, self.pins_easy, self.easy_question)
+        self._pass(carol, self.pins_easy, self.easy_question)  # retake: same score, more attempts
+
+        user = User.objects.create_user(username="viewer", password="p", email="v@x.com")
+        self.client.force_login(user)
+        response = self.client.get(reverse("quiz:leaderboard", args=["pins"]))
+        names = [row["user"].username for row in response.context["rows"]]
+        self.assertEqual(names, ["alice", "bob", "carol"])
+        rows = {row["user"].username: row for row in response.context["rows"]}
+        self.assertEqual(rows["alice"]["level"], "hard")
+        self.assertEqual(rows["bob"]["attempts"], 1)
+        self.assertEqual(rows["carol"]["attempts"], 2)
+
+    def test_anonymous_attempts_excluded(self):
+        anon = Qtaker.objects.create(name="Anon", email="anon@x.com", user=None, test_result=100.0)
+        QuestionResult.objects.create(qtaker=anon, question=self.easy_question, correct=True)
+        user = User.objects.create_user(username="viewer2", password="p", email="v2@x.com")
+        self.client.force_login(user)
+        response = self.client.get(reverse("quiz:leaderboard", args=["pins"]))
+        self.assertNotContains(response, "Anon")
+        self.assertEqual(len(response.context["rows"]), 0)
+
+    def test_leaderboard_index_redirects(self):
+        user = User.objects.create_user(username="viewer3", password="p", email="v3@x.com")
+        self.client.force_login(user)
+        response = self.client.get(reverse("quiz:leaderboard_index"))
+        self.assertRedirects(response, reverse("quiz:leaderboard", args=["mate_in_1"]))

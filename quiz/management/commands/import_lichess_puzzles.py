@@ -177,13 +177,14 @@ class Command(BaseCommand):
 
     def _create_question(self, questionnaire, creator, fen, solution_uci, solution_san, side, puzzle_id):
         motif_label = questionnaire.get_motif_display()
+        difficulty_label = questionnaire.get_difficulty_display()
         next_placement = (
             Question.objects.filter(questionnaire=questionnaire).aggregate(Max("placement"))["placement__max"] or 0
         ) + 1
         question = Question.objects.create(
             questionnaire=questionnaire,
             question_type="text",
-            question=f"<p>{side} to play — {motif_label}. <em>(Lichess puzzle {puzzle_id})</em></p>",
+            question=f"<p>{side} to play — {motif_label} ({difficulty_label}).</p>",
             placement=next_placement,
             is_approved=True,
             created_by=creator,

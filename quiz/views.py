@@ -4,7 +4,8 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
-from .models import Questionnaire, Question, Qtaker, Options, QuestionResult
+from django.http import Http404
+from .models import Questionnaire, Question, Qtaker, Options, QuestionResult, Activity
 from .forms import CoachQuestionForm, QtakerForm, AnswerForm
 
 
@@ -403,6 +404,11 @@ def quiz_result_view(request, qtaker_id):
                     pass
                 qtaker.skill = next_skill
 
+    if next_questionnaire_data is None:
+        # No next session (failed quiz, top of the ladder, or next
+        # questionnaire has no approved questions) — clear any queued set.
+        qtaker.next_question_set = []
+
     score_for_template = qtaker.current_score
     qtaker.current_score = 0
     qtaker.save(
@@ -413,6 +419,13 @@ def quiz_result_view(request, qtaker_id):
         from .badges import evaluate_badges
         for badge in evaluate_badges(qtaker):
             messages.success(request, f"Badge earned: {badge.icon} {badge.name}!")
+            Activity.objects.create(
+                user=qtaker.user,
+                kind="badge",
+                badge=badge,
+                text=f"earned the {badge.icon} {badge.name} badge",
+            )
+        _record_level_up_activity(qtaker, session_questionnaire)
 
     context = {
         "qtaker": qtaker,
@@ -479,3 +492,98 @@ def submit_question_view(request):
         "quiz/submit_question.html",
         {"form": form, "option_fields": [form[f"option_{i}"] for i in range(1, 5)]},
     )
+
+
+def _record_level_up_activity(qtaker, questionnaire):
+    """Write a feed event the first time this user passes a (motif, difficulty).
+
+    Retakes of an already-passed level produce nothing; passing a higher
+    difficulty does (it is a different (motif, difficulty) pair)."""
+    if qtaker.user_id is None or questionnaire is None:
+        return
+    motif, difficulty = questionnaire.motif, questionnaire.difficulty
+    if not motif or not difficulty:
+        return  # legacy quiz — no level-ups
+    previously_passed = Qtaker.objects.filter(
+        user=qtaker.user,
+        test_result__gt=PASS_PERCENTAGE,
+        questionresult__question__questionnaire__motif=motif,
+        questionresult__question__questionnaire__difficulty=difficulty,
+    ).exclude(pk=qtaker.pk).exists()
+    if previously_passed:
+        return
+    motif_label = dict(Questionnaire.QUESTION_MOTIFS)[motif]
+    difficulty_label = dict(Questionnaire.QUESTION_GRADES)[difficulty]
+    Activity.objects.create(
+        user=qtaker.user,
+        kind="level_up",
+        text=f"reached {difficulty_label} in {motif_label} for the first time ⭐",
+    )
+
+
+@login_required
+def feed_view(request):
+    """Activity feed: badge awards and level-ups across all students.
+
+    Logged-in users only; students identified by username (privacy decision,
+    design doc §6.2)."""
+    activities = Activity.objects.select_related("user", "badge")[:100]
+    return render(request, "quiz/feed.html", {"activities": activities})
+
+
+@login_required
+def leaderboard_view(request, motif):
+    """Per-motif leaderboard. Ranked by level (highest difficulty passed),
+    then best score, then fewest attempts. Anonymous attempts excluded;
+    usernames only. Design doc §6.2."""
+    motif_labels = dict(Questionnaire.QUESTION_MOTIFS)
+    if motif not in motif_labels:
+        raise Http404("Unknown motif.")
+
+    from .proficiency import LEVELS  # local import: proficiency imports this module
+
+    results = (
+        QuestionResult.objects.filter(question__questionnaire__motif=motif)
+        .select_related("qtaker", "question__questionnaire")
+    )
+    rows = {}
+    for result in results:
+        user = result.qtaker.user
+        if user is None:
+            continue  # anonymous attempt — excluded from the leaderboard
+        row = rows.setdefault(user.id, {"user": user, "best_score": 0.0, "sessions": set(), "passed": set()})
+        row["sessions"].add(result.qtaker_id)
+        if result.qtaker.test_result is not None:
+            row["best_score"] = max(row["best_score"], result.qtaker.test_result)
+        pair_difficulty = result.question.questionnaire.difficulty
+        if result.qtaker.test_result is not None and result.qtaker.test_result > PASS_PERCENTAGE:
+            row["passed"].add(pair_difficulty)
+
+    table = []
+    for row in rows.values():
+        passed_indexes = [LEVELS.index(d) for d in row["passed"] if d in LEVELS]
+        highest = max(passed_indexes) if passed_indexes else None
+        table.append({
+            "user": row["user"],
+            "level": LEVELS[highest] if highest is not None else None,
+            "level_value": (highest + 1) if highest is not None else 0,
+            "best_score": round(row["best_score"], 1),
+            "attempts": len(row["sessions"]),
+        })
+    table.sort(key=lambda r: (-r["level_value"], -r["best_score"], r["attempts"]))
+    table = table[:20]
+    for rank, row in enumerate(table, start=1):
+        row["rank"] = rank
+        row["is_current_user"] = row["user"] == request.user
+
+    return render(request, "quiz/leaderboard.html", {
+        "motif": motif,
+        "motif_label": motif_labels[motif],
+        "motifs": Questionnaire.QUESTION_MOTIFS,
+        "rows": table,
+    })
+
+
+@login_required
+def leaderboard_index_view(request):
+    return redirect("quiz:leaderboard", motif=Questionnaire.QUESTION_MOTIFS[0][0])

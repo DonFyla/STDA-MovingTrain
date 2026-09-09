@@ -2,11 +2,12 @@ import json
 from datetime import date, time, timedelta, timezone as dt_timezone
 from unittest.mock import patch
 from django.core import mail
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from .models import Coach, AvailabilitySlot, CoachBlockedDate, Booking, FlexibleBooking
+from .models import Coach, AvailabilitySlot, CoachBlockedDate, Booking, FlexibleBooking, SessionReminder, SpecialBooking
 
 User = get_user_model()
 
@@ -1375,3 +1376,247 @@ class MinimumBookingNoticeTests(TestCase):
     def test_recurring_booking_allows_first_session_after_24_hours(self):
         form = self._recurring_form(2, "11:00|12:00")
         self.assertTrue(form.is_valid(), form.errors)
+
+
+class SessionNoteTests(TestCase):
+    """Coach session notes: write/read history, coach-only access, handover."""
+
+    def setUp(self):
+        self.coach_user = User.objects.create_user(
+            username="coach1", password="testpass", email="coach1@x.com", is_coach=True
+        )
+        self.coach = Coach.objects.create(user=self.coach_user, name="Coach One")
+        self.other_coach_user = User.objects.create_user(
+            username="coach2", password="testpass", email="coach2@x.com", is_coach=True
+        )
+        Coach.objects.create(user=self.other_coach_user, name="Coach Two")
+        self.student = User.objects.create_user(
+            username="student1", password="testpass", email="student1@x.com"
+        )
+
+    def _link_student(self):
+        FlexibleBooking.objects.create(
+            user=self.student,
+            coach=self.coach,
+            session_date=date(2026, 9, 1),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            day_of_week=1,
+            points_used=1,
+        )
+
+    def test_coach_can_add_note(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("scheduling:student_note_detail", args=[self.student.id]),
+            {"session_date": "2026-09-01", "content": "Covered pins and knight forks."},
+        )
+        self.assertRedirects(
+            response, reverse("scheduling:student_note_detail", args=[self.student.id])
+        )
+        note = self.student.session_notes.get()
+        self.assertEqual(note.coach, self.coach)
+        self.assertEqual(note.content, "Covered pins and knight forks.")
+
+    def test_another_coach_sees_history(self):
+        self.client.force_login(self.coach_user)
+        self.client.post(
+            reverse("scheduling:student_note_detail", args=[self.student.id]),
+            {"session_date": "2026-09-01", "content": "First coach note about pins."},
+        )
+        self.client.force_login(self.other_coach_user)
+        response = self.client.get(
+            reverse("scheduling:student_note_detail", args=[self.student.id])
+        )
+        self.assertContains(response, "First coach note about pins.")
+        self.assertContains(response, "Coach One")
+        self.assertContains(response, "proficiencyChart")
+
+    def test_student_cannot_access_notes(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("scheduling:student_notes"))
+        self.assertEqual(response.status_code, 302)
+        response = self.client.get(
+            reverse("scheduling:student_note_detail", args=[self.student.id])
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(reverse("scheduling:student_notes"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_future_date_rejected(self):
+        self.client.force_login(self.coach_user)
+        response = self.client.post(
+            reverse("scheduling:student_note_detail", args=[self.student.id]),
+            {"session_date": "2999-01-01", "content": "From the future."},
+        )
+        self.assertEqual(self.student.session_notes.count(), 0)
+        self.assertContains(response, "future")
+
+    def test_empty_content_rejected(self):
+        self.client.force_login(self.coach_user)
+        self.client.post(
+            reverse("scheduling:student_note_detail", args=[self.student.id]),
+            {"session_date": "2026-09-01", "content": ""},
+        )
+        self.assertEqual(self.student.session_notes.count(), 0)
+
+    def test_student_list_shows_linked_student(self):
+        self._link_student()
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("scheduling:student_notes"))
+        self.assertContains(response, "student1")
+
+    def test_student_list_search(self):
+        self._link_student()
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("scheduling:student_notes"), {"q": "nomatch"})
+        self.assertNotContains(response, "student1")
+
+
+class SessionReminderTests(TestCase):
+    """1-hour-before email reminders for upcoming sessions."""
+
+    def setUp(self):
+        self.coach_user = User.objects.create_user(
+            username="rcoach", password="testpass", email="rcoach@x.com", is_coach=True
+        )
+        self.coach = Coach.objects.create(user=self.coach_user, name="Reminder Coach", email="rcoach@x.com")
+        self.student = User.objects.create_user(
+            username="rstudent", password="testpass", email="rstudent@x.com"
+        )
+        self.local_now = timezone.localtime()
+
+    def _flexible(self, start_time, status="confirmed"):
+        return FlexibleBooking.objects.create(
+            user=self.student,
+            coach=self.coach,
+            session_date=self.local_now.date(),
+            start_time=start_time,
+            end_time=time(start_time.hour + 1, start_time.minute) if start_time.hour < 23 else time(23, 59),
+            day_of_week=self.local_now.weekday(),
+            points_used=1,
+            status=status,
+        )
+
+    def _in_one_hour(self):
+        target = self.local_now + timedelta(hours=1)
+        return time(target.hour, target.minute)
+
+    def test_reminder_sent_to_student_and_coach(self):
+        self._flexible(self._in_one_hour())
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = {msg.to[0] for msg in mail.outbox}
+        self.assertEqual(recipients, {"rstudent@x.com", "rcoach@x.com"})
+        self.assertTrue(
+            SessionReminder.objects.filter(kind="flexible").exists()
+        )
+
+    def test_reminder_sent_exactly_once(self):
+        self._flexible(self._in_one_hour())
+        call_command("send_session_reminders")
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(SessionReminder.objects.count(), 1)
+
+    def test_cancelled_session_not_reminded(self):
+        self._flexible(self._in_one_hour(), status="cancelled")
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(SessionReminder.objects.count(), 0)
+
+    def test_outside_window_not_reminded(self):
+        soon = self.local_now + timedelta(minutes=30)
+        self._flexible(time(soon.hour, soon.minute))
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_recurring_booking_reminded(self):
+        Booking.objects.create(
+            coach=self.coach,
+            student_name=self.student.full_name or self.student.username,
+            student_email=self.student.email,
+            booking_date=self.local_now.date(),
+            start_time=self._in_one_hour(),
+            end_time=time(12, 0),
+            status="confirmed",
+            payment_status="paid",
+            recurring_dates=[self.local_now.date().isoformat()],
+        )
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertTrue(SessionReminder.objects.filter(kind="recurring").exists())
+
+    def test_recurring_unpaid_not_reminded(self):
+        Booking.objects.create(
+            coach=self.coach,
+            student_name=self.student.username,
+            student_email=self.student.email,
+            booking_date=self.local_now.date(),
+            start_time=self._in_one_hour(),
+            end_time=time(12, 0),
+            status="confirmed",
+            payment_status="pending",
+            recurring_dates=[self.local_now.date().isoformat()],
+        )
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def _special(self, start_time, status="confirmed"):
+        return SpecialBooking.objects.create(
+            coach=self.coach,
+            student=self.student,
+            student_name=self.student.username,
+            student_email=self.student.email,
+            total_sessions=1,
+            sessions_completed=0,
+            session_dates=[{
+                "date": self.local_now.date().isoformat(),
+                "start_time": start_time.strftime("%H:%M"),
+                "end_time": time(start_time.hour + 1, start_time.minute).strftime("%H:%M")
+                if start_time.hour < 23 else "23:59",
+            }],
+            hourly_rate=10000,
+            total_amount=10000,
+            status=status,
+            payment_status="paid",
+        )
+
+    def test_special_booking_reminded(self):
+        self._special(self._in_one_hour())
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 2)
+        reminder = SessionReminder.objects.get(kind="special")
+        self.assertEqual(reminder.session_key, self._in_one_hour().strftime("%H:%M"))
+
+    def test_special_booking_reminded_once(self):
+        self._special(self._in_one_hour())
+        call_command("send_session_reminders")
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(SessionReminder.objects.count(), 1)
+
+    def test_special_pending_payment_not_reminded(self):
+        self._special(self._in_one_hour(), status="pending_payment")
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_special_two_slots_same_date_both_reminded(self):
+        booking = self._special(self._in_one_hour())
+        second = self.local_now + timedelta(hours=1, minutes=30)
+        if time(second.hour, second.minute) > self._in_one_hour():
+            booking.session_dates.append({
+                "date": self.local_now.date().isoformat(),
+                "start_time": time(second.hour, second.minute).strftime("%H:%M"),
+                "end_time": time(second.hour + 1, second.minute).strftime("%H:%M")
+                if second.hour < 23 else "23:59",
+            })
+            booking.total_sessions = 2
+            booking.save()
+            call_command("send_session_reminders")
+            # First slot in window gets reminded now; the second is outside the
+            # window and must be picked up on a later run with its own row.
+            self.assertEqual(len(mail.outbox), 2)
+            self.assertEqual(SessionReminder.objects.count(), 1)

@@ -361,3 +361,64 @@ class CoachBlockedDate(models.Model):
 
     def __str__(self):
         return f"{self.coach.name} - {self.blocked_date}"
+
+
+class SessionNote(models.Model):
+    """A coach's record of what was taught in a session with a student.
+
+    Free-standing (not tied to a booking) so a student's full learning history
+    carries over when a different coach takes them. Append-and-keep: notes are
+    never edited or deleted, so the timeline stays an accurate handover record.
+    Coaches only — students never see these. Design ref:
+    docs/chess-proficiency-design.md §6.1."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    coach = models.ForeignKey(
+        Coach, on_delete=models.CASCADE, related_name="session_notes"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="session_notes",
+    )
+    session_date = models.DateField()
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-session_date", "-created_at"]
+        verbose_name = "Session Note"
+        verbose_name_plural = "Session Notes"
+
+    def __str__(self):
+        return f"{self.coach.name} on {self.student}: {self.session_date}"
+
+
+class SessionReminder(models.Model):
+    """One sent (or attempted) 1-hour-before-session reminder. One row per
+    (booking kind, booking, session date) so a session is never reminded
+    twice, and each occurrence of a recurring booking gets its own row."""
+
+    KIND_CHOICES = [
+        ("flexible", "Flexible booking"),
+        ("recurring", "Monthly (recurring) booking"),
+        ("special", "Special booking"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    booking_id = models.UUIDField()
+    session_date = models.DateField()
+    # Disambiguates multiple sessions of one booking on the same date
+    # (special bookings can book several slots a day); HH:MM or "".
+    session_key = models.CharField(max_length=10, blank=True, default="")
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["kind", "booking_id", "session_date", "session_key"]
+        verbose_name = "Session Reminder"
+        verbose_name_plural = "Session Reminders"
+
+    def __str__(self):
+        return f"{self.kind} {self.booking_id} on {self.session_date}"

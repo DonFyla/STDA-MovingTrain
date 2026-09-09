@@ -186,7 +186,12 @@ badges in colour, unearned greyed out.
   not needed yet (display-only phase); server-side legality is covered by python-chess.
   Shared partials: `templates/quiz/_chessboard.html` (board div) and
   `templates/quiz/_chessboard_init.html` (module script); board orientation faces the
-  side to move.
+  side to move. ✅ **Theme overrides (2026-09-07):** `static/css/chessboard.css` —
+  deeper walnut square colors (light `#e6c88f`, dark `#a06a35`) replacing the washed-out
+  default brown theme, and corrected coordinates (chessground's reference `brown.css`
+  parity rules make half the rank/file labels invisible on a standalone board; the
+  override pins the strips to the board edges and fixes the colors). Loaded via
+  `templates/quiz/_chessboard_assets.html` after the three CDN stylesheets.
 - **Backend:** `pip install python-chess` → `requirements.txt`. Used for:
   - validating FEN in `CoachQuestionForm` (`chess.Board(fen)` raises on invalid input);
   - grading interactive answers: `Question.solution_uci` (e.g. `"g1f3"`) vs the move played
@@ -206,6 +211,8 @@ badges in colour, unearned greyed out.
   `quiz/management/commands/import_lichess_puzzles.py` filters by theme (→ our motifs) and
   rating band (→ easy/medium/hard) and creates approved `Question` rows with `fen` +
   `solution_uci`. This instantly fills the motif quizzes with real content.
+  Question text is simply `"{side} to play — {motif} ({difficulty})."` — no lichess
+  branding/tag (changed 2026-09-07); puzzle ID is kept only in the import log.
 - **Deferred:** Lichess OAuth account-linking, game import, live puzzle API. A much bigger
   commitment (token storage on `accounts.User`, background jobs) — revisit after badges ship.
 
@@ -313,18 +320,36 @@ derived later as a simple roll-up — deliberately not specced yet.
 
 ---
 
-## 6. Social features — FUTURE, documented only
+## 6. Social & future features
 
-Not built now. When we get there:
+**✅ Built 2026-09-07** (privacy decisions resolved first — students may be minors):
 
-- **Badge showcase:** public profile page listing a user's `UserBadge`s (already have all
-  the data — this is just a view + template).
-- **Feeds page:** an `Activity` model (user, verb, object, created_at) — badge awards,
-  level-ups written at award time; feed = reverse-chron list. Could start by reusing
-  `UserBadge.awarded_at` and adding the table only when verbs multiply.
-- **Leaderboard:** aggregate query over `UserBadge`/`QuestionResult` — e.g. per motif:
-  highest level, then best score, then fewest attempts. Decide opt-in/privacy rules
-  (student names are minors' data — check with the academy before public leaderboards).
+- **Activity feed** (`/quiz/feed/`) — `quiz.Activity` model (user/kind/badge/text/created_at,
+  text frozen at write time). Events: badge awards and first-time passes of a
+  (motif, difficulty) pair ("level-ups"), written in `quiz_result_view` after grading.
+  Visible to **logged-in users only**; students identified by **username only**.
+- **Per-motif leaderboard** (`/quiz/leaderboard/<motif>/`) — ranked by level (highest
+  difficulty passed) → best score → fewest attempts, aggregated over `QuestionResult`;
+  anonymous attempts excluded; top 20; username only; logged-in only.
+- **Coach session notes** (`/scheduling/coach/notes/`) — `scheduling.SessionNote`
+  (coach FK, student FK, session_date, content, timestamps). Free-standing (not tied to a
+  booking) so a student's learning history survives coach changes; append-and-keep, never
+  edited/deleted; attributed by coach name. **Coaches only** — students never see notes.
+  Student picker = users linked via session notes or any booking channel
+  (`Booking.student_email`, `FlexibleBooking.user`, `SpecialBooking.student`); searchable.
+  The student's proficiency chart (`quiz/_proficiency_chart.html` partial, shared with the
+  student dashboard) sits next to the note form on the detail page.
+
+Remaining from the 2026-08-27 list:
+
+1. **Coach visibility into student progress** — partially covered by session notes +
+   proficiency chart; a dedicated per-student badge/progress view on the coach dashboard
+   is still open if wanted.
+2. **Badge showcase** (public profile of earned badges) — still pending; the privacy
+   decisions above (logged-in only, username-only) are the template for it.
+3. **Multi-move puzzles ("mate in 2")** — the deferred half of Phase 7. Needs server-side
+   reply moves and puzzle state on `Qtaker` (JSONField, same pattern as
+   `current_question_set`). Only when mate-in-2 quizzes go live.
 
 ---
 
@@ -336,7 +361,8 @@ Not built now. When we get there:
    `Questionnaire.motif`/`difficulty` have `default=""` (changed 2026-08-27 after tests
    exposed that a non-empty default made every new questionnaire claim to be
    mate_in_1/easy). ⚠️ Existing dev-DB rows were stamped `mate_in_1`/`easy` by migration
-   0008 — blank the legacy ones manually in admin if not done yet.
+   0008 — ✅ blanked 2026-09-07 (the three legacy questionnaires in the dev DB now have
+   `motif=''`/`difficulty=''`, so they're excluded from the chart and badges as intended).
 3. Anonymous quiz-takers: `Qtaker.user` is nullable today and anonymous play is supported.
    Proficiency charts and badges need a logged-in user — restrict motif quizzes to
    logged-in students, or keep an anonymous mode that just doesn't record stats?

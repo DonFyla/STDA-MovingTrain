@@ -1,6 +1,6 @@
 import json
 from django import forms
-from .models import Booking, Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking
+from .models import Booking, Coach, AvailabilitySlot, CoachBlockedDate, SpecialBooking, SessionNote
 
 
 class CoachProfileForm(forms.ModelForm):
@@ -383,3 +383,32 @@ class SpecialBookingForm(forms.Form):
                     )
 
         return slots
+
+
+class SessionNoteForm(forms.ModelForm):
+    """Coach's record of a session with a student. coach/student are set by
+    the view — never by the form (no tampering)."""
+
+    class Meta:
+        model = SessionNote
+        fields = ["session_date", "content"]
+        widgets = {
+            "session_date": forms.DateInput(attrs={"type": "date"}),
+            "content": forms.Textarea(
+                attrs={
+                    "rows": 5,
+                    "placeholder": (
+                        "What did you cover? Topics, openings, tactics themes, "
+                        "homework set, things to revisit next session…"
+                    ),
+                }
+            ),
+        }
+
+    def clean_session_date(self):
+        from datetime import date as dt_date
+
+        session_date = self.cleaned_data["session_date"]
+        if session_date > dt_date.today():
+            raise forms.ValidationError("Session date cannot be in the future.")
+        return session_date

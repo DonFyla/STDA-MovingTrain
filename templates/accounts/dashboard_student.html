@@ -297,58 +297,38 @@
 
         <!-- Bottom Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Chess Proficiency -->
-            <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-                <div class="px-5 py-4 border-b border-brand-100 flex items-center justify-between">
-                    <h2 class="font-bold text-brand-900">Chess Proficiency</h2>
-                </div>
-                <div class="p-5">
-                    <canvas id="proficiencyChart" height="240"></canvas>
-                    {{ proficiency|json_script:"proficiency-data" }}
-                    {% if motif_quizzes %}
-                        <div class="mt-4 border-t border-brand-100 pt-4">
-                            <p class="text-xs text-brand-500 uppercase tracking-wider mb-2">Take a motif quiz</p>
-                            {% for label, quizzes in motif_quizzes.items %}
-                                <div class="flex items-center justify-between py-1.5">
-                                    <span class="text-sm font-medium text-brand-900">{{ label }}</span>
-                                    <span class="flex gap-1.5">
-                                        {% for questionnaire in quizzes %}
-                                            <a href="{% url 'quiz:motif_quiz' motif=questionnaire.motif difficulty=questionnaire.difficulty %}"
-                                               class="text-xs px-2.5 py-1 rounded-full border border-brand-200 text-brand-700 hover:bg-brand-600 hover:text-white transition-colors">
-                                                {{ questionnaire.get_difficulty_display }}
-                                            </a>
-                                        {% endfor %}
-                                    </span>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Badges -->
+            <!-- Chess Proficiency (full row) -->
             <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden lg:col-span-2">
                 <div class="px-5 py-4 border-b border-brand-100">
-                    <h2 class="font-bold text-brand-900">Badges</h2>
+                    <h2 class="font-bold text-brand-900">Chess Proficiency</h2>
+                    <p class="text-sm text-brand-500 mt-0.5">Highest level passed per motif — hover a bar for details.</p>
                 </div>
-                <div class="p-5">
-                    {% if earned_badges or locked_badges %}
-                        <div class="flex flex-wrap gap-4">
-                            {% for award in earned_badges %}
-                                <div class="flex flex-col items-center text-center w-24" title="{{ award.badge.description }} — earned {{ award.awarded_at|date:'M j, Y' }}">
-                                    <span class="text-3xl">{{ award.badge.icon }}</span>
-                                    <span class="text-xs font-medium text-brand-900 mt-1">{{ award.badge.name }}</span>
-                                </div>
-                            {% endfor %}
-                            {% for badge in locked_badges %}
-                                <div class="flex flex-col items-center text-center w-24 opacity-40 grayscale" title="Locked — {{ badge.description }}">
-                                    <span class="text-3xl">{{ badge.icon }}</span>
-                                    <span class="text-xs font-medium text-brand-500 mt-1">{{ badge.name }}</span>
-                                </div>
-                            {% endfor %}
+                <div class="p-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2">
+                        {% include "quiz/_proficiency_chart.html" %}
+                    </div>
+                    {% if motif_quizzes %}
+                        <div class="border-t border-brand-100 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+                            <p class="text-xs text-brand-500 uppercase tracking-wider mb-3">Take a motif quiz</p>
+                            <div class="space-y-2">
+                                {% for label, quizzes in motif_quizzes.items %}
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-sm font-medium text-brand-900">{{ label }}</span>
+                                        <span class="flex gap-1.5">
+                                            {% for questionnaire in quizzes %}
+                                                <a href="{% url 'quiz:motif_quiz' motif=questionnaire.motif difficulty=questionnaire.difficulty %}"
+                                                   class="text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors
+                                                          {% if questionnaire.difficulty == 'easy' %}bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white
+                                                          {% elif questionnaire.difficulty == 'medium' %}bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white
+                                                          {% else %}bg-red-50 border-red-200 text-red-700 hover:bg-red-600 hover:text-white{% endif %}">
+                                                    {{ questionnaire.get_difficulty_display }}
+                                                </a>
+                                            {% endfor %}
+                                        </span>
+                                    </div>
+                                {% endfor %}
+                            </div>
                         </div>
-                    {% else %}
-                        <p class="text-brand-600 text-sm text-center py-4">Pass a motif quiz to earn your first badge.</p>
                     {% endif %}
                 </div>
             </div>
@@ -361,16 +341,18 @@
                 </div>
                 <div class="p-5">
                     {% if quiz_history %}
-                        <ul class="space-y-4">
+                        <ul class="divide-y divide-brand-50">
                             {% for qtaker in quiz_history %}
-                                <li class="flex items-center justify-between">
+                                <li class="flex items-center justify-between py-3 first:pt-0 last:pb-0">
                                     <div>
                                         <p class="font-medium text-brand-900 capitalize">{{ qtaker.quiz_label }}</p>
                                         <p class="text-sm text-brand-500">{{ qtaker.date_taken|date:"M j, Y" }}</p>
                                     </div>
-                                    <div class="text-right">
-                                        <p class="font-bold text-brand-900">{{ qtaker.test_result|default:"0"|floatformat:0 }}%</p>
-                                    </div>
+                                    {% with score=qtaker.test_result|default:0 %}
+                                        <span class="text-sm font-bold px-2.5 py-1 rounded-full {% if score > 60 %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-600{% endif %}">
+                                            {{ score|floatformat:0 }}%
+                                        </span>
+                                    {% endwith %}
                                 </li>
                             {% endfor %}
                         </ul>
@@ -383,13 +365,40 @@
                 </div>
             </div>
 
-            <!-- Account Info -->
+            <!-- Badges -->
             <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
+                <div class="px-5 py-4 border-b border-brand-100">
+                    <h2 class="font-bold text-brand-900">Badges</h2>
+                </div>
+                <div class="p-5">
+                    {% if earned_badges or locked_badges %}
+                        <div class="flex flex-wrap gap-4">
+                            {% for award in earned_badges %}
+                                <div class="flex flex-col items-center text-center w-24" title="{{ award.badge.description }} — earned {{ award.awarded_at|date:'M j, Y' }}">
+                                    <span class="w-14 h-14 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-2xl shadow-sm">{{ award.badge.icon }}</span>
+                                    <span class="text-xs font-medium text-brand-900 mt-2 leading-tight">{{ award.badge.name }}</span>
+                                </div>
+                            {% endfor %}
+                            {% for badge in locked_badges %}
+                                <div class="flex flex-col items-center text-center w-24 opacity-40 grayscale" title="Locked — {{ badge.description }}">
+                                    <span class="w-14 h-14 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-2xl">{{ badge.icon }}</span>
+                                    <span class="text-xs font-medium text-brand-500 mt-2 leading-tight">{{ badge.name }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-brand-600 text-sm text-center py-4">Pass a motif quiz to earn your first badge.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Account Info (full row) -->
+            <div class="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden lg:col-span-2">
                 <div class="px-5 py-4 border-b border-brand-100 flex items-center justify-between">
                     <h2 class="font-bold text-brand-900">Account Information</h2>
                     <a href="{% url 'accounts:profile_edit' %}" class="text-sm font-medium text-brand-700 hover:text-brand-900">Edit profile →</a>
                 </div>
-                <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div class="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                     <div>
                         <p class="text-xs text-brand-500 uppercase tracking-wider">Name</p>
                         <p class="font-medium text-brand-900 mt-0.5">{{ user.full_name|default:"Not provided" }}</p>
@@ -411,51 +420,4 @@
         </div>
     </div>
 </section>
-{% endblock %}
-
-{% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script>
-(function () {
-    const data = JSON.parse(document.getElementById('proficiency-data').textContent);
-    const levelLabels = ['Not started', 'Easy', 'Medium', 'Hard'];
-    new Chart(document.getElementById('proficiencyChart'), {
-        type: 'bar',
-        data: {
-            labels: data.map(d => d.label),
-            datasets: [{
-                data: data.map(d => d.level_value),
-                backgroundColor: '#5E5044',
-                borderRadius: 6,
-                maxBarThickness: 48,
-            }]
-        },
-        options: {
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: function (ctx) {
-                            const d = data[ctx.dataIndex];
-                            if (!d.attempts) return 'Not attempted yet';
-                            const level = d.level ? levelLabels[d.level_value] + ' level achieved' : 'No level passed yet';
-                            return level + ' · ' + d.attempts + ' quiz(zes) · best ' + d.best_score + '%';
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    min: 0,
-                    max: 3,
-                    ticks: {
-                        stepSize: 1,
-                        callback: function (v) { return levelLabels[v]; }
-                    }
-                }
-            }
-        }
-    });
-})();
-</script>
 {% endblock %}

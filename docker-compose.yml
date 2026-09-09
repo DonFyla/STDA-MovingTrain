@@ -35,5 +35,23 @@ services:
       - db
       - redis
 
+  reminders:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    # Runs send_session_reminders every 5 minutes (the command's window is
+    # ±10 min around the 1-hour mark, so nothing is missed or doubled).
+    command: sh -c "while true; do python manage.py send_session_reminders; sleep 300; done"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/chess_academy
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
 volumes:
   postgres_data:

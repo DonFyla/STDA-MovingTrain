@@ -13,4 +13,6 @@ urlpatterns = [
     path("book/retry-payment/<uuid:booking_id>/", views.retry_booking_payment_view, name="retry_booking_payment"),
     path("book/retry-special-payment/<uuid:booking_id>/", views.retry_special_payment_view, name="retry_special_payment"),
     path("book/cancel-subscription/<uuid:booking_id>/", views.cancel_subscription_view, name="cancel_subscription"),
+    path("coach/notes/", views.student_notes_view, name="student_notes"),
+    path("coach/notes/<uuid:user_id>/", views.student_note_detail_view, name="student_note_detail"),
 ]

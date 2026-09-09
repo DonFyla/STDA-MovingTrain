@@ -47,9 +47,7 @@
 
 {% block extra_css %}
 {% if question.fen %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.base.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.brown.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9/assets/chessground.cburnett.css">
+{% include "quiz/_chessboard_assets.html" %}
 {% endif %}
 {% endblock %}
 
