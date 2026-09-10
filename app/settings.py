@@ -160,6 +160,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Custom user model
 AUTH_USER_MODEL = "accounts.User"
 
+# Login matches the email field case-insensitively (see accounts/backends.py)
+AUTHENTICATION_BACKENDS = ["accounts.backends.CaseInsensitiveEmailBackend"]
+
 # CKEditor 5
 CKEDITOR_5_CONFIGS = {
     "default": {

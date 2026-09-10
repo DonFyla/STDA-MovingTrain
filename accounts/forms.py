@@ -36,6 +36,11 @@ class CustomUserCreationForm(UserCreationForm):
         model = User
         fields = ("email", "username", "full_name", "phone", "role")
 
+    def clean_email(self):
+        # Store lowercase so accounts can't differ only by email casing and
+        # login can match case-insensitively.
+        return self.cleaned_data["email"].strip().lower()
+
     def clean_form_ts(self):
         value = self.cleaned_data.get("form_ts", "")
         try:
@@ -97,6 +102,9 @@ class CustomUserChangeForm(UserChangeForm):
             self.fields["is_coach"].widget = forms.HiddenInput()
         if "is_student" in self.fields:
             self.fields["is_student"].widget = forms.HiddenInput()
+
+    def clean_email(self):
+        return self.cleaned_data["email"].strip().lower()
 
     def clean(self):
         cleaned_data = super().clean()

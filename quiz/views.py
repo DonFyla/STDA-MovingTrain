@@ -1,3 +1,4 @@
+import chess
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -59,14 +60,35 @@ def _text_answer_is_correct(question, answer_text):
     return any(cleaned == text.strip().lower() for text in correct_texts)
 
 
+def _mate_in_one_is_satisfied(question, uci):
+    """True if the supplied move is legal and delivers immediate checkmate.
+
+    Lichess records a single solution line, but mate-in-1 puzzles can have
+    several mating moves (e.g. promoting to either a rook or a queen), so
+    grade by outcome rather than exact move equality."""
+    try:
+        board = chess.Board(question.fen)
+        move = chess.Move.from_uci(uci)
+    except ValueError:
+        return False
+    if move not in board.legal_moves:
+        return False
+    board.push(move)
+    return board.is_checkmate()
+
+
 def _answer_is_correct(question, answer_text):
     """Grade a text/board answer: exact UCI match against solution_uci when set,
-    otherwise any correct option text (covers SAN and UCI for imported puzzles)."""
+    otherwise any correct option text (covers SAN and UCI for imported puzzles).
+    Mate-in-1 also accepts any other move that checkmates."""
     cleaned = (answer_text or "").strip().lower()
     if not cleaned:
         return False
-    if question.solution_uci and cleaned == question.solution_uci.strip().lower():
-        return True
+    if question.solution_uci:
+        if cleaned == question.solution_uci.strip().lower():
+            return True
+        if question.questionnaire.motif == "mate_in_1":
+            return _mate_in_one_is_satisfied(question, cleaned)
     return _text_answer_is_correct(question, answer_text)
 
 

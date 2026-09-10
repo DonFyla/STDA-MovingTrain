@@ -889,6 +889,24 @@ class BoardGradingTests(TestCase):
         qtaker = self._play("  A1A8 ")
         self.assertEqual(qtaker.current_score, 1)
 
+    def test_mate_in_one_accepts_alternative_mating_move(self):
+        """Real lichess puzzle 001KR: both Rf8# (the recorded solution) and
+        Rd8# mate. An alternative mating move must grade correct."""
+        self.question.fen = "6k1/p1p3pp/4N3/1p6/2q1r1n1/2B5/PP4PP/3R1R1K w - - 0 29"
+        self.question.solution_uci = "f1f8"
+        self.question.save()
+        qtaker = self._play("d1d8")
+        self.assertEqual(qtaker.current_score, 1)
+        self.assertTrue(qtaker.questionresult_set.get().correct)
+
+    def test_mate_in_one_still_rejects_non_mating_move(self):
+        self.question.fen = "6k1/p1p3pp/4N3/1p6/2q1r1n1/2B5/PP4PP/3R1R1K w - - 0 29"
+        self.question.solution_uci = "f1f8"
+        self.question.save()
+        qtaker = self._play("h2h3")
+        self.assertEqual(qtaker.current_score, 0)
+        self.assertFalse(qtaker.questionresult_set.get().correct)
+
 
 class MotifProgressionTests(TestCase):
     """Passing a motif quiz should offer the same motif at the next difficulty,

@@ -782,3 +782,40 @@ class PasswordChangeTests(TestCase):
         response = self.client.get(reverse("accounts:password_change"))
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("accounts:login"), response.url)
+
+
+class CaseInsensitiveEmailAuthTests(TestCase):
+    """Login must match the stored email regardless of casing — users who
+    registered with a capitalized email (phones auto-capitalize) were locked
+    out when typing it lowercase."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="caseauth", email="John@gmail.com", password="testpass123"
+        )
+
+    def test_login_with_lowercase_email(self):
+        self.assertTrue(self.client.login(username="john@gmail.com", password="testpass123"))
+
+    def test_login_with_uppercase_email(self):
+        self.assertTrue(self.client.login(username="JOHN@GMAIL.COM", password="testpass123"))
+
+    def test_login_with_wrong_password_still_fails(self):
+        self.assertFalse(self.client.login(username="john@gmail.com", password="nope12345"))
+
+    def test_signup_form_lowercases_email(self):
+        from accounts.forms import CustomUserCreationForm
+
+        form = CustomUserCreationForm(
+            data={
+                "email": "BrandNew@EXAMPLE.com",
+                "username": "brandnew",
+                "password1": "Str0ngPass123!",
+                "password2": "Str0ngPass123!",
+                "role": "student",
+                "form_ts": signing.dumps(unix_time() - 60),
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        user = form.save()
+        self.assertEqual(user.email, "brandnew@example.com")
