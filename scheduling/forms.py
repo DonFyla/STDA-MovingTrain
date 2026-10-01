@@ -197,7 +197,7 @@ class BookingForm(forms.ModelForm):
             start_1, end_1 = slot_1.split("|")
             cleaned["start_time_1"] = forms.TimeField().clean(start_1)
             cleaned["end_time_1"] = forms.TimeField().clean(end_1)
-        except ValueError:
+        except (ValueError, forms.ValidationError):
             raise forms.ValidationError("Invalid time slot selected for the first session.")
 
         if mode == "double":
@@ -291,6 +291,9 @@ class BookingForm(forms.ModelForm):
         instance.booking_date = dt_date.fromisoformat(recurring_dates[0]["date"])
         instance.start_time = start_1
         instance.end_time = end_1
+        if mode == "double":
+            instance.start_time2 = start_2
+            instance.end_time2 = end_2
         instance.status = "pending"
         instance.payment_status = "pending"
 

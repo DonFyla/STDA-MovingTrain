@@ -161,6 +161,8 @@ class Booking(models.Model):
     booking_date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
+    start_time2 = models.TimeField(null=True)
+    end_time2 = models.TimeField(null=True)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="pending"
     )

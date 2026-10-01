@@ -12,7 +12,7 @@
     <p><strong>Days:</strong>
         {% for day in booking.recurring_days %}{{ day|day_name }}{% if not forloop.last %} & {% endif %}{% endfor %}
     </p>
-    <p><strong>Time:</strong> {{ booking.start_time|time:"g:i A" }} - {{ booking.end_time|time:"g:i A" }}</p>
+    <p><strong>Time:</strong> {{ booking.start_time|time:"g:i A" }} - {{ booking.end_time|time:"g:i A" }} {%if booking.start_time2 %} &amp;{{ booking.start_time2|time:"g:i A" }} - {{ booking.end_time2|time:"g:i A" }} respectively {% endif %}</p>
     <p><strong>Sessions per Month:</strong> {{ booking.sessions_per_month }}</p>
     <p><strong>Amount Paid:</strong> ₦{{ booking.monthly_amount|floatformat:0|intcomma }}</p>
     <p><strong>Reference:</strong> {{ booking.payment_reference|default:booking.id }}</p>

@@ -44,7 +44,7 @@
                             <div class="flex justify-between"><span class="text-brand-600">Coach</span><span class="font-bold text-brand-900">{{ booking.coach.name }}</span></div>
                             <div class="flex justify-between"><span class="text-brand-600">Schedule</span>
                                 <span class="font-bold text-brand-900">
-                                    {% for day in booking.recurring_days %}{{ day|day_name }}{% if not forloop.last %} & {% endif %}{% endfor %} at {{ booking.start_time|time:"g:i A" }}
+                                    {% for day in booking.recurring_days %}{{ day|day_name }}{% if not forloop.last %} & {% endif %}{% endfor %} at {{ booking.start_time|time:"g:i A"}} - {{ booking.end_time|time:"g:i A" }} {% if booking.start_time2 %} &amp; {{ booking.start_time2|time:"g:i A" }} - {{ booking.end_time2|time:"g:i A" }} respectively.
                                 </span>
                             </div>
                             <div class="flex justify-between"><span class="text-brand-600">Total Sessions</span><span class="font-bold text-brand-900">{{ booking.sessions_per_month }}</span></div>

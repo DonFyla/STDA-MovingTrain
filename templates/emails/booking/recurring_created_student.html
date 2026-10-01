@@ -11,7 +11,10 @@
     <p><strong>Coach:</strong> {{ coach.name }}</p>
     <p><strong>Schedule:</strong>
         {% for day in booking.recurring_days %}{{ day|day_name }}{% if not forloop.last %} & {% endif %}{% endfor %}
-        at {{ booking.start_time|time:"g:i A" }}
+        at {{ booking.start_time|time:"g:i A" }} - {{ booking.end_time|time:"g:i A" }}
+        {% if booking.start_time2 %}
+            &amp; {{ booking.start_time2|time:"g:i A" }} - {{ booking.end_time2|time:"g:i A" }} respectively
+        {% endif %}
     </p>
     <p><strong>Total Sessions:</strong> {{ booking.sessions_per_month }}</p>
     <p><strong>Amount Due:</strong> ₦{{ booking.monthly_amount|floatformat:0|intcomma }}</p>
