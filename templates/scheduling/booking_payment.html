@@ -41,8 +41,8 @@
                 <div class="p-6 space-y-6">
                     <div class="bg-brand-50 rounded-xl p-5">
                         <div class="space-y-3 text-sm">
-                            <div class="flex justify-between"><span class="text-brand-600">Coach</span><span class="font-bold text-brand-900">{{ booking.coach.name }}</span></div>
-                            <div class="flex justify-between"><span class="text-brand-600">Schedule</span>
+                            <div class="flex justify-between"><span class="text-brand-600">Coach:</span><span class="font-bold text-brand-900">{{ booking.coach.name }}</span></div>
+                            <div class="flex justify-between"><span class="text-brand-600">Schedule:</span>
                                 <span class="font-bold text-brand-900">
                                     {% for day in booking.recurring_days %}{{ day|day_name }}{% if not forloop.last %} & {% endif %}{% endfor %} at {{ booking.start_time|time:"g:i A"}} - {{ booking.end_time|time:"g:i A" }} {% if booking.start_time2 %} &amp; {{ booking.start_time2|time:"g:i A" }} - {{ booking.end_time2|time:"g:i A" }} {%endif%} respectively.
                                 </span>
@@ -59,7 +59,7 @@
                             <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto"></div>
                         </div>
 
-                        <a id="flutterwave-pay-btn" href="{{ authorization_url }}" class="hidden flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold transition-colors">
+                        <a id="flutterwave-pay-btn" href="{{ authorization_url }}" class="flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold transition-colors">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 012 0z"></path></svg>
                             Pay with Flutterwave
                         </a>
@@ -72,10 +72,10 @@
                                 if (url) {
                                     setTimeout(function() {
                                         window.location.href = url;
-                                    }, 1500);
+                                    }, 10000);
                                 } else {
                                     document.getElementById('flutterwave-redirect').classList.add('hidden');
-                                    document.getElementById('flutterwave-pay-btn').classList.remove('hidden');
+                                    /*document.getElementById('flutterwave-pay-btn').classList.remove('hidden');*/
                                 }
                             })();
                         </script>

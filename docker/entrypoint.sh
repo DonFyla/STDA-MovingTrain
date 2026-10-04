@@ -23,7 +23,9 @@ fi
 
 # Apply migrations
 echo "Applying migrations..."
-python manage.py migrate --noinput
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    python manage.py migrate --noinput
+fi    
 
 # Collect static files
 echo "Collecting static files..."

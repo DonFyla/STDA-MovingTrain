@@ -31,6 +31,7 @@ services:
     environment:
       - DATABASE_URL=postgres://user:password@db:5432/chess_academy
       - REDIS_URL=redis://redis:6379/0
+      - RUN_MIGRATIONS=true
     depends_on:
       - db
       - redis
@@ -49,6 +50,7 @@ services:
     environment:
       - DATABASE_URL=postgres://user:password@db:5432/chess_academy
       - REDIS_URL=redis://redis:6379/0
+      - RUN_MIGRATIONS=false
     depends_on:
       - db
       - redis
