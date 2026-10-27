@@ -1,4 +1,3 @@
-import hashlib
 import hmac
 import requests
 import secrets
@@ -287,18 +286,13 @@ def verify_webhook_signature(request_body, signature):
     """
     Verify the Flutterwave webhook signature.
 
-    Flutterwave sends the header `verif-hash` containing a SHA-256 HMAC
-    of the request body signed with the webhook secret hash.
-
-    Returns True if the signature is valid or no secret is configured.
+    Flutterwave sends the dashboard's secret hash verbatim in the
+    `verif-hash` header — it is NOT an HMAC of the request body, so
+    verification is a constant-time comparison against the configured
+    secret. Fails closed (returns False) when either side is missing.
+    `request_body` is accepted for API compatibility but is not used.
     """
     secret = settings.FLUTTERWAVE_WEBHOOK_SECRET
-    if not secret:
+    if not secret or not signature:
         return False
-
-    expected = hmac.new(
-        secret.encode("utf-8"),
-        request_body,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    return hmac.compare_digest(secret.encode("utf-8"), signature.encode("utf-8"))

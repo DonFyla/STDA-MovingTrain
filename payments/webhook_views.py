@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 from datetime import timedelta
 from decimal import Decimal
 
@@ -11,6 +12,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .models import PointTransaction
 from .flutterwave_service import verify_transaction, verify_webhook_signature
+
+logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
@@ -30,6 +33,12 @@ def flutterwave_webhook_view(request):
     # Verify signature
     signature = request.headers.get("verif-hash", "")
     if not verify_webhook_signature(request.body, signature):
+        if not settings.FLUTTERWAVE_WEBHOOK_SECRET:
+            logger.error(
+                "Rejected Flutterwave webhook: FLUTTERWAVE_WEBHOOK_SECRET is not configured."
+            )
+        else:
+            logger.warning("Rejected Flutterwave webhook with invalid verif-hash.")
         return JsonResponse(
             {"status": "error", "message": "Invalid signature"},
             status=403,
@@ -99,30 +108,70 @@ def flutterwave_webhook_view(request):
                         )
                         send_recurring_booking_confirmed(booking)
                         return JsonResponse({"status": "ok"})
+                    logger.warning(
+                        "Booking payment amount mismatch for booking %s: expected %s, got %s.",
+                        booking.id,
+                        expected_amount,
+                        actual_amount,
+                    )
+                else:
+                    logger.warning(
+                        "Booking payment verification failed for tx_ref=%s: %s",
+                        reference,
+                        verified.get("message"),
+                    )
             except Booking.DoesNotExist:
                 pass
 
             # 3. Try recurring subscription renewal (booking already confirmed)
             plan_id = _extract_plan_id(data)
             if plan_id:
-                try:
-                    from scheduling.models import Booking
-                    from scheduling.emails import send_recurring_payment_received
+                from scheduling.models import Booking
+                from scheduling.emails import send_recurring_payment_received
 
-                    booking = Booking.objects.get(
-                        flutterwave_payment_plan_id=plan_id,
-                        subscription_status="active",
+                matches = Booking.objects.filter(
+                    flutterwave_payment_plan_id=plan_id,
+                    subscription_status="active",
+                ).order_by("-payment_date")
+                booking = matches.first()
+                if booking is None:
+                    logger.warning(
+                        "Renewal charge for plan %s (tx_ref=%s) matched no active booking.",
+                        plan_id,
+                        reference,
                     )
+                else:
+                    if matches.count() > 1:
+                        logger.warning(
+                            "Renewal charge for plan %s matched %d active bookings; "
+                            "using the most recently paid.",
+                            plan_id,
+                            matches.count(),
+                        )
 
                     verified = verify_transaction(reference)
                     tx_data = verified.get("data", {})
-                    if (
+                    if not (
                         verified.get("success")
                         and tx_data.get("status") == "successful"
                     ):
+                        logger.warning(
+                            "Renewal verification failed for plan %s (tx_ref=%s): %s",
+                            plan_id,
+                            reference,
+                            verified.get("message"),
+                        )
+                    else:
                         expected_amount = Decimal(str(booking.monthly_amount))
                         actual_amount = Decimal(str(tx_data.get("amount", 0)))
-                        if actual_amount == expected_amount:
+                        if actual_amount != expected_amount:
+                            logger.warning(
+                                "Renewal amount mismatch for booking %s: expected %s, got %s.",
+                                booking.id,
+                                expected_amount,
+                                actual_amount,
+                            )
+                        else:
                             booking.payment_date = timezone.now()
                             booking.next_billing_date = timezone.now() + timedelta(
                                 days=30
@@ -139,8 +188,6 @@ def flutterwave_webhook_view(request):
                             )
                             send_recurring_payment_received(booking)
                             return JsonResponse({"status": "ok"})
-                except Booking.DoesNotExist:
-                    pass
 
             # 4. Try special coaching booking
             try:
@@ -163,6 +210,18 @@ def flutterwave_webhook_view(request):
                             update_fields=["payment_status", "payment_date", "status"]
                         )
                         return JsonResponse({"status": "ok"})
+                    logger.warning(
+                        "Special booking payment amount mismatch for booking %s: expected %s, got %s.",
+                        booking.id,
+                        expected_amount,
+                        actual_amount,
+                    )
+                else:
+                    logger.warning(
+                        "Special booking payment verification failed for tx_ref=%s: %s",
+                        reference,
+                        verified.get("message"),
+                    )
             except SpecialBooking.DoesNotExist:
                 pass
 

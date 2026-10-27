@@ -1,10 +1,11 @@
 import json
-from datetime import date, time
+from datetime import date, time, timedelta
 from unittest.mock import patch
 from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from .models import UserPoints, PointTransaction
 from .points_service import add_points, use_points, get_balance
 
@@ -140,15 +141,11 @@ class FlutterwaveWebhookTests(TestCase):
         )
 
     def _signature(self, payload_bytes):
-        import hashlib
-        import hmac
+        # Flutterwave sends the dashboard's secret hash verbatim in the
+        # verif-hash header — it is not an HMAC of the request body.
         from django.conf import settings
 
-        return hmac.new(
-            settings.FLUTTERWAVE_WEBHOOK_SECRET.encode("utf-8"),
-            payload_bytes,
-            hashlib.sha256,
-        ).hexdigest()
+        return settings.FLUTTERWAVE_WEBHOOK_SECRET
 
     def test_webhook_credits_points_on_charge_completed(self):
         payload = {
@@ -330,6 +327,97 @@ class FlutterwaveWebhookTests(TestCase):
         self.assertEqual(booking.flutterwave_subscription_id, "sub_999")
         self.assertIsNotNone(booking.payment_date)
         self.assertIsNotNone(booking.next_billing_date)
+
+    def test_webhook_rejects_when_secret_unconfigured(self):
+        from django.test import override_settings
+
+        with override_settings(FLUTTERWAVE_WEBHOOK_SECRET=""):
+            payload = {
+                "event": "charge.completed",
+                "data": {"tx_ref": "FLT-WEBHOOK-123", "status": "successful"},
+            }
+            body = json.dumps(payload).encode("utf-8")
+            response = self.client.post(
+                reverse("payments:flutterwave_webhook"),
+                data=body,
+                content_type="application/json",
+                HTTP_VERIF_HASH="anything",
+            )
+        self.assertEqual(response.status_code, 403)
+
+    @patch("payments.webhook_views.verify_transaction")
+    def test_webhook_renewal_with_duplicate_plan_bookings_updates_most_recent(
+        self, mock_verify
+    ):
+        """Two active bookings sharing a plan must not 500 the webhook;
+        the most recently paid one is treated as the renewee."""
+        from scheduling.models import Booking, Coach
+
+        coach = Coach.objects.create(name="Dup Coach", email="dupcoach@example.com")
+        older = Booking.objects.create(
+            coach=coach,
+            student_name="Older Student",
+            student_email="older@example.com",
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            flutterwave_payment_plan_id="3807",
+            payment_status="paid",
+            payment_date=timezone.now() - timedelta(days=40),
+            status="confirmed",
+            subscription_status="active",
+        )
+        newer = Booking.objects.create(
+            coach=coach,
+            student_name="Newer Student",
+            student_email="newer@example.com",
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            flutterwave_payment_plan_id="3807",
+            payment_status="paid",
+            payment_date=timezone.now() - timedelta(days=2),
+            status="confirmed",
+            subscription_status="active",
+        )
+        mock_verify.return_value = {
+            "success": True,
+            "data": {
+                "status": "successful",
+                "amount": 40000,
+                "tx_ref": "BK-SUB-RENEWAL-DUP",
+                "subscription_id": "sub_dup",
+            },
+        }
+
+        payload = {
+            "event": "charge.completed",
+            "data": {
+                "tx_ref": "BK-SUB-RENEWAL-DUP",
+                "status": "successful",
+                "plan_id": "3807",
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        response = self.client.post(
+            reverse("payments:flutterwave_webhook"),
+            data=body,
+            content_type="application/json",
+            HTTP_VERIF_HASH=self._signature(body),
+        )
+        self.assertEqual(response.status_code, 200)
+        newer.refresh_from_db()
+        older.refresh_from_db()
+        self.assertEqual(newer.flutterwave_subscription_id, "sub_dup")
+        self.assertNotEqual(older.flutterwave_subscription_id, "sub_dup")
 
     def test_webhook_cancels_subscription_on_subscription_cancelled(self):
         from scheduling.models import Booking, Coach
