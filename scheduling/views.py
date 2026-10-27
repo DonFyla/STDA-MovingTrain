@@ -746,7 +746,6 @@ def booking_confirmation_view(request, booking_id):
         or (booking.coach.user == request.user)
     ):
         raise PermissionDenied
-    print(f"{booking.recurring_dates[0]['start_time']} - {booking.recurring_dates[0]['end_time']} and {booking.recurring_dates[1]['start_time']} - {booking.recurring_dates[0]['start_time']} respectively")
     return render(request, "scheduling/booking_confirmation.html", {"booking": booking})
 
 
