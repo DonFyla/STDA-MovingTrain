@@ -136,8 +136,6 @@ def sync_subscriptions(now=None):
         for tx in transactions:
             if (tx.get("customer", {}).get("email") or "").lower() != email:
                 continue
-            if tx.get("tx_ref") == booking.payment_reference:
-                continue  # the first payment, already recorded
             try:
                 if Decimal(str(tx.get("amount"))) != expected:
                     continue
@@ -146,6 +144,8 @@ def sync_subscriptions(now=None):
             charged_at = _parse_fw_datetime(tx.get("created_at"))
             if charged_at is None:
                 continue
+            # Renewals may reuse the first payment's tx_ref, so date is the
+            # only reliable way to exclude the already-recorded first payment.
             if booking.payment_date and charged_at <= booking.payment_date:
                 continue
             candidates.append((charged_at, tx))

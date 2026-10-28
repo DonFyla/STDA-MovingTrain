@@ -864,7 +864,11 @@ class SubscriptionSyncTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)  # the receipt they never got
 
     def test_first_payment_tx_is_not_treated_as_renewal(self):
-        old_payment_date = self.booking.payment_date
+        # The first payment's tx timestamp precedes the recorded payment_date
+        # (set at confirmation), so the date guard excludes it.
+        recorded = timezone.now() - timedelta(days=39)
+        self.booking.payment_date = recorded
+        self.booking.save()
         result = self._sync(
             subscriptions=[
                 {
@@ -876,17 +880,56 @@ class SubscriptionSyncTests(TestCase):
             ],
             transactions=[
                 {
-                    "tx_ref": "BK-SYNC-1",  # the stored first-payment reference
+                    "tx_ref": "BK-SYNC-1",
                     "amount": 40000,
-                    "created_at": (timezone.now() - timedelta(days=5)).isoformat(),
+                    "created_at": (timezone.now() - timedelta(days=40)).isoformat(),
                     "customer": {"email": "syncstudent@example.com"},
                 }
             ],
         )
         self.booking.refresh_from_db()
-        self.assertEqual(self.booking.payment_date, old_payment_date)
+        self.assertEqual(self.booking.payment_date, recorded)
         self.assertEqual(result["backfilled"], 0)
         self.assertEqual(len(mail.outbox), 0)
+
+    def test_renewal_reusing_first_payment_tx_ref_is_backfilled(self):
+        """Flutterwave renewals can reuse the original tx_ref; only the
+        charge date distinguishes them from the first payment."""
+        first_charge = timezone.now() - timedelta(days=40)
+        self.booking.payment_date = first_charge + timedelta(seconds=22)
+        self.booking.save()
+        renewal_charge = timezone.now() - timedelta(days=10)
+        result = self._sync(
+            subscriptions=[
+                {
+                    "id": "sub_sync",
+                    "plan": 5500,
+                    "status": "active",
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+            transactions=[
+                {
+                    "tx_ref": "BK-SYNC-1",
+                    "amount": 40000,
+                    "created_at": first_charge.isoformat(),
+                    "customer": {"email": "syncstudent@example.com"},
+                },
+                {
+                    "tx_ref": "BK-SYNC-1",  # same reference, one month later
+                    "amount": 40000,
+                    "created_at": renewal_charge.isoformat(),
+                    "customer": {"email": "syncstudent@example.com"},
+                },
+            ],
+        )
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.payment_date, renewal_charge)
+        self.assertEqual(
+            self.booking.next_billing_date, renewal_charge + timedelta(days=30)
+        )
+        self.assertEqual(result["backfilled"], 1)
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_unchanged_state_is_noop(self):
         next_payment = timezone.now() + timedelta(days=20)
