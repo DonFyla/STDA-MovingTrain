@@ -169,6 +169,89 @@ def _parse_response(response):
         return {"message": "Invalid response from Flutterwave"}
 
 
+def list_subscriptions(page=1):
+    """List subscriptions on the Flutterwave account (one page).
+
+    Returns dict with success (bool), data (list), message.
+    """
+    url = f"{FLUTTERWAVE_BASE_URL}/subscriptions"
+    try:
+        response = requests.get(
+            url, headers=_get_headers(), params={"page": page}, timeout=30
+        )
+        response.raise_for_status()
+        data = _parse_response(response)
+        if data.get("status") == "success":
+            return {
+                "success": True,
+                "data": data.get("data") or [],
+                "message": data.get("message", "OK"),
+            }
+        return {"success": False, "data": [], "message": data.get("message", "Failed")}
+    except RuntimeError as e:
+        return {"success": False, "data": [], "message": str(e)}
+    except requests.RequestException as e:
+        return {"success": False, "data": [], "message": f"Flutterwave request failed: {e}"}
+
+
+def list_all_subscriptions(max_pages=50):
+    """Fetch every subscription page. Returns (subscriptions, error)."""
+    subscriptions = []
+    for page in range(1, max_pages + 1):
+        result = list_subscriptions(page)
+        if not result["success"]:
+            return subscriptions, result["message"]
+        batch = result["data"]
+        if not batch:
+            break
+        subscriptions.extend(batch)
+        if len(batch) < 10:  # last page (default page size is 10)
+            break
+    return subscriptions, None
+
+
+def list_successful_transactions(from_date, to_date, page=1):
+    """List successful transactions in a date window (YYYY-MM-DD strings).
+
+    Returns dict with success (bool), data (list), message.
+    """
+    url = f"{FLUTTERWAVE_BASE_URL}/transactions"
+    params = {"page": page, "from": from_date, "to": to_date, "status": "successful"}
+    try:
+        response = requests.get(
+            url, headers=_get_headers(), params=params, timeout=30
+        )
+        response.raise_for_status()
+        data = _parse_response(response)
+        if data.get("status") == "success":
+            return {
+                "success": True,
+                "data": data.get("data") or [],
+                "message": data.get("message", "OK"),
+            }
+        return {"success": False, "data": [], "message": data.get("message", "Failed")}
+    except RuntimeError as e:
+        return {"success": False, "data": [], "message": str(e)}
+    except requests.RequestException as e:
+        return {"success": False, "data": [], "message": f"Flutterwave request failed: {e}"}
+
+
+def list_all_successful_transactions(from_date, to_date, max_pages=100):
+    """Fetch every page of successful transactions in the window."""
+    transactions = []
+    for page in range(1, max_pages + 1):
+        result = list_successful_transactions(from_date, to_date, page)
+        if not result["success"]:
+            return transactions, result["message"]
+        batch = result["data"]
+        if not batch:
+            break
+        transactions.extend(batch)
+        if len(batch) < 10:
+            break
+    return transactions, None
+
+
 def create_payment_plan(amount, name, interval="monthly", currency="NGN", duration=None):
     """
     Create a Flutterwave payment plan for subscriptions.

@@ -6,8 +6,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from scheduling.models import Booking
 from .models import UserPoints, PointTransaction
 from .points_service import add_points, use_points, get_balance
+from .subscription_sync import sync_subscriptions
 
 User = get_user_model()
 
@@ -749,3 +751,161 @@ class FlutterwaveServiceTests(TestCase):
         result = verify_transaction("FLT-123")
         self.assertTrue(result["success"])
         self.assertEqual(result["status"], "successful")
+
+
+class SubscriptionSyncTests(TestCase):
+    """Daily reconciliation with Flutterwave's API: subscription status sync
+    and backfill of renewals the webhook missed."""
+
+    def setUp(self):
+        from scheduling.models import Coach
+
+        self.coach = Coach.objects.create(
+            name="Sync Coach", email="synccoach@example.com"
+        )
+        self.booking = Booking.objects.create(
+            coach=self.coach,
+            student_name="Sync Student",
+            student_email="syncstudent@example.com",
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            payment_reference="BK-SYNC-1",
+            payment_status="paid",
+            payment_date=timezone.now() - timedelta(days=40),
+            status="confirmed",
+            subscription_status="active",
+            flutterwave_payment_plan_id="5500",
+        )
+
+    def _sync(self, subscriptions, transactions):
+        with (
+            patch(
+                "payments.subscription_sync.list_all_subscriptions",
+                return_value=(subscriptions, None),
+            ),
+            patch(
+                "payments.subscription_sync.list_all_successful_transactions",
+                return_value=(transactions, None),
+            ),
+        ):
+            return sync_subscriptions()
+
+    def test_cancelled_subscription_marks_booking_cancelled(self):
+        result = self._sync(
+            subscriptions=[
+                {
+                    "id": "sub_sync",
+                    "plan": 5500,
+                    "status": "cancelled",
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+            transactions=[],
+        )
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.subscription_status, "cancelled")
+        self.assertEqual(self.booking.status, "cancelled")
+        self.assertEqual(result["status_synced"], 1)
+
+    def test_active_subscription_updates_stale_next_billing_date(self):
+        next_payment = (timezone.now() + timedelta(days=20)).date()
+        result = self._sync(
+            subscriptions=[
+                {
+                    "id": "sub_sync",
+                    "plan": 5500,
+                    "status": "active",
+                    "next_payment_date": next_payment.isoformat(),
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+            transactions=[],
+        )
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.flutterwave_subscription_id, "sub_sync")
+        self.assertIsNotNone(self.booking.next_billing_date)
+        self.assertEqual(
+            self.booking.next_billing_date.date(), next_payment
+        )
+        self.assertEqual(result["status_synced"], 0)
+        self.assertGreaterEqual(result["billing_synced"], 1)
+
+    def test_missed_renewal_is_backfilled_and_receipt_sent(self):
+        charged_at = timezone.now() - timedelta(days=10)
+        result = self._sync(
+            subscriptions=[
+                {
+                    "id": "sub_sync",
+                    "plan": 5500,
+                    "status": "active",
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+            transactions=[
+                {
+                    "tx_ref": "FW-RENEWAL-1",
+                    "amount": 40000,
+                    "created_at": charged_at.isoformat(),
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+        )
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.payment_date, charged_at)
+        self.assertEqual(
+            self.booking.next_billing_date, charged_at + timedelta(days=30)
+        )
+        self.assertEqual(result["backfilled"], 1)
+        self.assertEqual(len(mail.outbox), 1)  # the receipt they never got
+
+    def test_first_payment_tx_is_not_treated_as_renewal(self):
+        old_payment_date = self.booking.payment_date
+        result = self._sync(
+            subscriptions=[
+                {
+                    "id": "sub_sync",
+                    "plan": 5500,
+                    "status": "active",
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+            transactions=[
+                {
+                    "tx_ref": "BK-SYNC-1",  # the stored first-payment reference
+                    "amount": 40000,
+                    "created_at": (timezone.now() - timedelta(days=5)).isoformat(),
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+        )
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.payment_date, old_payment_date)
+        self.assertEqual(result["backfilled"], 0)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_unchanged_state_is_noop(self):
+        next_payment = timezone.now() + timedelta(days=20)
+        self.booking.next_billing_date = next_payment
+        self.booking.flutterwave_subscription_id = "sub_sync"
+        self.booking.save()
+        result = self._sync(
+            subscriptions=[
+                {
+                    "id": "sub_sync",
+                    "plan": 5500,
+                    "status": "active",
+                    "next_payment_date": next_payment.isoformat(),
+                    "customer": {"email": "syncstudent@example.com"},
+                }
+            ],
+            transactions=[],
+        )
+        self.assertEqual(
+            result, {"status_synced": 0, "billing_synced": 0, "backfilled": 0}
+        )
+        self.assertEqual(len(mail.outbox), 0)
