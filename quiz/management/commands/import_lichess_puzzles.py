@@ -88,21 +88,31 @@ class Command(BaseCommand):
         questionnaire = self._get_questionnaire(motif, difficulty, creator)
 
         created = 0
-        for puzzle_id, puzzle_fen, solution_uci, solution_san, side in self._iter_puzzles(
+        updated = 0
+        for puzzle_id, puzzle_fen, solution_uci, solution_san, side, solution_line in self._iter_puzzles(
             options, themes, min_rating, max_rating
         ):
             if created >= options["count"]:
                 break
-            if Question.objects.filter(questionnaire=questionnaire, fen=puzzle_fen).exists():
-                continue  # dedupe: same position already imported
+            existing = Question.objects.filter(questionnaire=questionnaire, fen=puzzle_fen).first()
+            if existing:
+                if not existing.solution_line:
+                    existing.solution_line = solution_line
+                    existing.save(update_fields=["solution_line"])
+                    updated += 1
+                    self.stdout.write(f"  ~ {puzzle_id}: upgraded {questionnaire.title} Q{existing.placement}")
+                continue
 
             question = self._create_question(
-                questionnaire, creator, puzzle_fen, solution_uci, solution_san, side, puzzle_id
+                questionnaire, creator, puzzle_fen, solution_uci, solution_san, side, puzzle_id, solution_line
             )
             created += 1
             self.stdout.write(f"  + {puzzle_id}: {questionnaire.title} Q{question.placement}")
 
-        self.stdout.write(self.style.SUCCESS(f"Imported {created} puzzle(s) into '{questionnaire.title}'."))
+        self.stdout.write(self.style.SUCCESS(
+            f"Imported {created} puzzle(s) and updated {updated} existing puzzle(s) "
+            f"in '{questionnaire.title}'."
+        ))
 
     def _get_creator(self, email):
         User = get_user_model()
@@ -165,17 +175,18 @@ class Command(BaseCommand):
             board = chess.Board(fen)
             move_list = moves.split()
             board.push_uci(move_list[0])  # opponent's setup move -> the puzzle position
-            solution_move = chess.Move.from_uci(move_list[1])
+            solution_line = move_list[1:]
+            solution_move = chess.Move.from_uci(solution_line[0])
             solution_san = board.san(solution_move)
             side = "White" if board.turn == chess.WHITE else "Black"
-            yield puzzle_id, board.fen(), move_list[1], solution_san, side
+            yield puzzle_id, board.fen(), solution_line[0], solution_san, side, solution_line
 
     def _maybe_decompress(self, raw, path):
         if path.endswith(".zst"):
             return zstandard.ZstdDecompressor().stream_reader(raw)
         return raw
 
-    def _create_question(self, questionnaire, creator, fen, solution_uci, solution_san, side, puzzle_id):
+    def _create_question(self, questionnaire, creator, fen, solution_uci, solution_san, side, puzzle_id, solution_line):
         motif_label = questionnaire.get_motif_display()
         difficulty_label = questionnaire.get_difficulty_display()
         next_placement = (
@@ -190,6 +201,7 @@ class Command(BaseCommand):
             created_by=creator,
             fen=fen,
             solution_uci=solution_uci,
+            solution_line=solution_line,
         )
         # Accept the answer in either notation until interactive grading lands (Phase 7).
         Options.objects.create(question=question, text=solution_san, correct=True)

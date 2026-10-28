@@ -78,18 +78,55 @@ def _mate_in_one_is_satisfied(question, uci):
 
 
 def _answer_is_correct(question, answer_text):
-    """Grade a text/board answer: exact UCI match against solution_uci when set,
-    otherwise any correct option text (covers SAN and UCI for imported puzzles).
+    """Grade a text/board answer against its solution line or correct options.
     Mate-in-1 also accepts any other move that checkmates."""
     cleaned = (answer_text or "").strip().lower()
     if not cleaned:
         return False
+    solution_line = question.solution_line or []
+    if solution_line and cleaned == " ".join(solution_line).lower():
+        return True
     if question.solution_uci:
         if cleaned == question.solution_uci.strip().lower():
             return True
         if question.questionnaire.motif == "mate_in_1":
             return _mate_in_one_is_satisfied(question, cleaned)
     return _text_answer_is_correct(question, answer_text)
+
+
+def _is_multi_move(question):
+    return len(question.solution_line or []) > 1
+
+
+def _puzzle_position(qtaker, question):
+    """Return the current played line and reconstructed board for a puzzle."""
+    state = qtaker.puzzle_state or {}
+    played_line = state.get("played_line", []) if state.get("question_id") == question.id else []
+    if not isinstance(played_line, list):
+        played_line = []
+    solution_line = question.solution_line or []
+    if len(played_line) % 2 or len(played_line) >= len(solution_line):
+        played_line = []
+
+    board = chess.Board(question.fen)
+    try:
+        for uci in played_line:
+            board.push_uci(uci)
+    except ValueError:
+        played_line = []
+        board = chess.Board(question.fen)
+    return {"question_id": question.id, "played_line": played_line}, board
+
+
+def _san_line(fen, uci_line):
+    """Convert a space-separated UCI line to SAN, including opponent replies."""
+    board = chess.Board(fen)
+    san_moves = []
+    for uci in uci_line.split():
+        move = board.parse_uci(uci)
+        san_moves.append(board.san(move))
+        board.push(move)
+    return " ".join(san_moves)
 
 
 def _start_quiz_for_user(request, user, skill="beginner"):
@@ -219,6 +256,19 @@ def quiz_question_view(request, qtaker_id, question_id):
         else None
     )
 
+    board_fen = question.fen
+    puzzle_state = None
+    puzzle_board = None
+    puzzle_progress = None
+    if _is_multi_move(question):
+        puzzle_state, puzzle_board = _puzzle_position(qtaker, question)
+        board_fen = puzzle_board.fen()
+        played_count = len(puzzle_state["played_line"])
+        puzzle_progress = {
+            "current": played_count // 2 + 1,
+            "total": (len(question.solution_line) + 1) // 2,
+        }
+
     if request.method == "POST":
         form = AnswerForm(request.POST, question=question)
         if form.is_valid():
@@ -233,6 +283,35 @@ def quiz_question_view(request, qtaker_id, question_id):
                 )
                 is_correct = chosen_opt.correct
                 stored_answer_id = chosen_opt.id
+            elif _is_multi_move(question):
+                cleaned_move = answer_value.strip().lower()
+                solution_line = question.solution_line
+                played_line = list(puzzle_state["played_line"])
+                expected_move = solution_line[len(played_line)]
+                try:
+                    puzzle_board.parse_uci(cleaned_move)
+                    legal_move = True
+                except ValueError:
+                    legal_move = False
+
+                if legal_move and cleaned_move == expected_move:
+                    played_line.append(cleaned_move)
+                    puzzle_board.push_uci(cleaned_move)
+                    if len(played_line) < len(solution_line):
+                        opponent_move = solution_line[len(played_line)]
+                        puzzle_board.push_uci(opponent_move)
+                        played_line.append(opponent_move)
+                        qtaker.puzzle_state = {
+                            "question_id": question.id,
+                            "played_line": played_line,
+                        }
+                        qtaker.save(update_fields=["puzzle_state"])
+                        return redirect(
+                            "quiz:question", qtaker_id=qtaker.id, question_id=question.id
+                        )
+                    stored_text_answer = " ".join(played_line)
+                else:
+                    stored_text_answer = " ".join(played_line + [cleaned_move])
             elif question.question_type == "text":
                 is_correct = _answer_is_correct(question, answer_value)
                 stored_text_answer = answer_value.strip()
@@ -240,8 +319,11 @@ def quiz_question_view(request, qtaker_id, question_id):
             qtaker.last_answer_id = stored_answer_id
             qtaker.last_question_id = question.id
             qtaker.last_text_answer = stored_text_answer
+            qtaker.puzzle_state = {}
             qtaker.save(
-                update_fields=["last_answer_id", "last_question_id", "last_text_answer"]
+                update_fields=[
+                    "last_answer_id", "last_question_id", "last_text_answer", "puzzle_state"
+                ]
             )
 
             # Scoring is applied when viewing the answer details page.
@@ -257,6 +339,8 @@ def quiz_question_view(request, qtaker_id, question_id):
         "qtaker": qtaker,
         "question": question,
         "form": form,
+        "board_fen": board_fen,
+        "puzzle_progress": puzzle_progress,
         "next_question_id": next_question_id,
         "progress": {
             "current": question_ids.index(question.id) + 1,
@@ -283,8 +367,7 @@ def quiz_answer_view(request, qtaker_id, answer_id):
         display_answer = user_answer_text
         if question.fen and user_answer_text:
             try:
-                board = chess.Board(question.fen)
-                display_answer = board.san(board.parse_uci(user_answer_text))
+                display_answer = _san_line(question.fen, user_answer_text)
             except ValueError:
                 pass
         chosen_answer = {
@@ -323,6 +406,12 @@ def quiz_answer_view(request, qtaker_id, answer_id):
         qtaker.save(update_fields=["current_score", "scored_question_ids"])
 
     correct_answer = Options.objects.filter(question=question, correct=True).first()
+    solution_line_text = " ".join(question.solution_line or []) or question.solution_uci
+    if question.solution_line:
+        try:
+            correct_answer = {"text": _san_line(question.fen, solution_line_text)}
+        except ValueError:
+            correct_answer = {"text": solution_line_text}
 
     question_ids = qtaker.current_question_set or []
     next_question_id = None
@@ -337,6 +426,7 @@ def quiz_answer_view(request, qtaker_id, answer_id):
         "question": question,
         "chosen_answer": chosen_answer,
         "correct_answer": correct_answer,
+        "solution_line_text": solution_line_text,
         "is_correct": is_correct,
         "score": qtaker.current_score,
         "next_question_id": next_question_id,

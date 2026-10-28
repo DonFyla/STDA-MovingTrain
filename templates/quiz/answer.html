@@ -21,8 +21,8 @@
             <p class="font-medium text-gray-700 mb-2">Question:</p>
             <div class="mb-4">{{ question.question|safe }}</div>
 
-            {% include "quiz/_chessboard.html" with review_user_move=chosen_answer.text review_solution_move=question.solution_uci %}
-            {% if question.solution_uci and chosen_answer.text %}
+            {% include "quiz/_chessboard.html" with review_user_move=chosen_answer.text review_solution_move=solution_line_text %}
+            {% if solution_line_text and chosen_answer.text %}
                 <div data-review-controls class="flex justify-center gap-3 mb-4" aria-label="Review board moves">
                     <button type="button" data-review-move="user" aria-pressed="true" class="px-4 py-2 rounded-full border border-gray-300 bg-[#5E5044] text-white text-sm font-medium">Your move</button>
                     <button type="button" data-review-move="solution" aria-pressed="false" class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Correct move</button>

@@ -58,6 +58,13 @@
                         {% if form.solution_uci.errors %}<p class="mt-1 text-sm text-red-600">{{ form.solution_uci.errors|first }}</p>{% endif %}
                     </div>
 
+                    <div>
+                        <label for="{{ form.solution_line_text.id_for_label }}" class="block text-sm font-medium text-brand-700 mb-1">Full solution line (UCI, optional)</label>
+                        {{ form.solution_line_text|add_class:"w-full px-4 py-3 rounded-xl border border-brand-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 outline-none transition-all"|add_error_class:"border-red-500" }}
+                        <p class="mt-1 text-xs text-brand-500">For multi-move puzzles, enter student and opponent moves in order, e.g. <code>e2e4 e7e5 g1f3</code>. The line must end with the student's move. This overrides the single solution move above.</p>
+                        {% if form.solution_line_text.errors %}<p class="mt-1 text-sm text-red-600">{{ form.solution_line_text.errors|first }}</p>{% endif %}
+                    </div>
+
                     <div id="radio-fields" class="space-y-4">
                         <p class="text-sm font-medium text-brand-700">Answer options</p>
                         {% for option_field in option_fields %}

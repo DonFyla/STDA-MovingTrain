@@ -19,18 +19,25 @@
         const controls = document.querySelector('[data-review-controls]');
         if (!controls) return;
 
-        function reviewPosition(uci) {
+        function reviewPosition(uciLine) {
             const game = new Chess(fen);
-            if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(uci || '')) {
+            const moves = (uciLine || '').trim().split(/\s+/).filter(Boolean);
+            if (!moves.length || moves.some(function (uci) {
+                return !/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(uci);
+            })) {
                 return { fen: fen, lastMove: [] };
             }
             try {
-                const move = game.move({
-                    from: uci.slice(0, 2),
-                    to: uci.slice(2, 4),
-                    promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+                let lastMove = [];
+                moves.forEach(function (uci) {
+                    const move = game.move({
+                        from: uci.slice(0, 2),
+                        to: uci.slice(2, 4),
+                        promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+                    });
+                    lastMove = [move.from, move.to];
                 });
-                return { fen: game.fen(), lastMove: [move.from, move.to] };
+                return { fen: game.fen(), lastMove: lastMove };
             } catch (error) {
                 return { fen: fen, lastMove: [] };
             }

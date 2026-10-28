@@ -58,6 +58,7 @@ class Qtaker(models.Model):
     last_answer_id = models.PositiveIntegerField(null=True, blank=True)
     last_question_id = models.PositiveIntegerField(null=True, blank=True)
     last_text_answer = models.CharField(max_length=2000, blank=True, default="")
+    puzzle_state = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return self.name
@@ -84,6 +85,7 @@ class Question(models.Model):
 
     fen = models.CharField(max_length=300, blank=True, default="")
     solution_uci = models.CharField(max_length=10, blank=True, default="")
+    solution_line = models.JSONField(default=list, blank=True)
 
     questionnaire = models.ForeignKey(Questionnaire, on_delete=models.CASCADE)
     question_type = models.CharField(

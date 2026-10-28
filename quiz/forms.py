@@ -56,6 +56,10 @@ class CoachQuestionForm(forms.ModelForm):
         required=False,
     )
     expected_answer = forms.CharField(required=False, max_length=2000)
+    solution_line_text = forms.CharField(
+        required=False,
+        help_text="For multi-move puzzles, enter student and opponent moves in order.",
+    )
 
     class Meta:
         model = Question
@@ -82,9 +86,29 @@ class CoachQuestionForm(forms.ModelForm):
         cleaned_data = super().clean()
         question_type = cleaned_data.get("question_type")
 
+        solution_line_text = (cleaned_data.get("solution_line_text") or "").strip().lower()
         solution_uci = (cleaned_data.get("solution_uci") or "").strip()
-        if solution_uci:
-            fen = cleaned_data.get("fen") or ""
+        fen = cleaned_data.get("fen") or ""
+        if solution_line_text:
+            if not fen:
+                raise forms.ValidationError(
+                    "A solution line requires a board position (FEN)."
+                )
+            solution_line = solution_line_text.split()
+            if len(solution_line) % 2 == 0:
+                raise forms.ValidationError(
+                    "The solution line must end with the student's move (an odd number of moves)."
+                )
+            board = chess.Board(fen)
+            for move_number, uci in enumerate(solution_line, start=1):
+                try:
+                    board.push_uci(uci)
+                except ValueError:
+                    raise forms.ValidationError(
+                        f"Solution move {move_number} ({uci}) is not legal in its position."
+                    )
+            cleaned_data["solution_uci"] = solution_line[0]
+        elif solution_uci:
             if not fen:
                 raise forms.ValidationError(
                     "A solution move requires a board position (FEN)."
@@ -119,3 +143,13 @@ class CoachQuestionForm(forms.ModelForm):
                 )
 
         return cleaned_data
+
+    def save(self, commit=True):
+        question = super().save(commit=False)
+        solution_line = (self.cleaned_data.get("solution_line_text") or "").lower().split()
+        if solution_line:
+            question.solution_line = solution_line
+            question.solution_uci = solution_line[0]
+        if commit:
+            question.save()
+        return question

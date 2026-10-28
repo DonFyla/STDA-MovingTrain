@@ -1162,3 +1162,219 @@ class LeaderboardTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse("quiz:leaderboard_index"))
         self.assertRedirects(response, reverse("quiz:leaderboard", args=["mate_in_1"]))
+
+
+class MultiMovePuzzleTests(TestCase):
+    """Server-driven multi-move puzzles, including opponent replies."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="multi", password="testpass", email="multi@example.com"
+        )
+        self.questionnaire = Questionnaire.objects.create(
+            title="Mate in 2 — Easy",
+            description="",
+            motif="mate_in_2",
+            difficulty="easy",
+            created_by=self.user,
+        )
+        self.question = Question.objects.create(
+            questionnaire=self.questionnaire,
+            question="White to play.",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            is_approved=True,
+            fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            solution_uci="e2e4",
+            solution_line=["e2e4", "e7e5", "g1f3"],
+        )
+        self.qtaker = Qtaker.objects.create(
+            name="Multi",
+            email="multi@example.com",
+            user=self.user,
+            current_question_set=[self.question.id],
+        )
+        self.client.force_login(self.user)
+        self.question_url = reverse(
+            "quiz:question", args=[self.qtaker.id, self.question.id]
+        )
+        self.answer_url = reverse("quiz:answer", args=[self.qtaker.id, 0])
+
+    def test_correct_intermediate_move_plays_reply_without_scoring(self):
+        response = self.client.post(self.question_url, {"answer": "e2e4"})
+        self.assertRedirects(response, self.question_url, fetch_redirect_response=False)
+        self.qtaker.refresh_from_db()
+        self.assertEqual(
+            self.qtaker.puzzle_state,
+            {
+                "question_id": self.question.id,
+                "played_line": ["e2e4", "e7e5"],
+            },
+        )
+        self.assertEqual(self.qtaker.current_score, 0)
+        self.assertFalse(QuestionResult.objects.filter(qtaker=self.qtaker).exists())
+
+        response = self.client.get(self.question_url)
+        self.assertEqual(
+            response.context["board_fen"],
+            "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        )
+        self.assertEqual(response.context["puzzle_progress"], {"current": 2, "total": 2})
+        self.assertContains(response, "Move 2 of 2")
+        self.assertNotContains(response, "g1f3")
+
+    def test_final_move_scores_once_and_displays_complete_san_line(self):
+        self.client.post(self.question_url, {"answer": "e2e4"})
+        response = self.client.post(self.question_url, {"answer": "g1f3"})
+        self.assertRedirects(response, self.answer_url, fetch_redirect_response=False)
+        self.qtaker.refresh_from_db()
+        self.assertEqual(self.qtaker.puzzle_state, {})
+        self.assertEqual(self.qtaker.last_text_answer, "e2e4 e7e5 g1f3")
+
+        response = self.client.get(self.answer_url)
+        self.qtaker.refresh_from_db()
+        self.assertEqual(self.qtaker.current_score, 1)
+        result = QuestionResult.objects.get(qtaker=self.qtaker, question=self.question)
+        self.assertTrue(result.correct)
+        self.assertEqual(result.answer_given, "e2e4 e7e5 g1f3")
+        self.assertContains(response, "e4 e5 Nf3")
+        self.assertContains(response, 'data-solution-move="e2e4 e7e5 g1f3"')
+
+        self.client.get(self.answer_url)
+        self.qtaker.refresh_from_db()
+        self.assertEqual(self.qtaker.current_score, 1)
+        self.assertEqual(
+            QuestionResult.objects.filter(qtaker=self.qtaker, question=self.question).count(),
+            1,
+        )
+
+    def test_wrong_and_illegal_moves_do_not_score(self):
+        for move in ("e2e3", "e2e5"):
+            with self.subTest(move=move):
+                qtaker = Qtaker.objects.create(
+                    name="Wrong",
+                    email="multi@example.com",
+                    user=self.user,
+                    current_question_set=[self.question.id],
+                )
+                question_url = reverse(
+                    "quiz:question", args=[qtaker.id, self.question.id]
+                )
+                self.client.post(question_url, {"answer": move})
+                self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+                qtaker.refresh_from_db()
+                self.assertEqual(qtaker.current_score, 0)
+                self.assertEqual(qtaker.puzzle_state, {})
+                result = QuestionResult.objects.get(qtaker=qtaker, question=self.question)
+                self.assertFalse(result.correct)
+
+    def test_illegal_final_move_preserves_played_line_in_answer(self):
+        self.client.post(self.question_url, {"answer": "e2e4"})
+        self.client.post(self.question_url, {"answer": "g1f4"})
+        self.client.get(self.answer_url)
+        self.qtaker.refresh_from_db()
+        result = QuestionResult.objects.get(qtaker=self.qtaker, question=self.question)
+        self.assertFalse(result.correct)
+        self.assertEqual(result.answer_given, "e2e4 e7e5 g1f4")
+
+
+class CoachMultiMoveQuestionFormTests(TestCase):
+    def setUp(self):
+        from .forms import CoachQuestionForm
+
+        self.form_class = CoachQuestionForm
+        self.user = User.objects.create_user(
+            username="coach-multi", password="testpass", email="coach-multi@example.com"
+        )
+        self.questionnaire = Questionnaire.objects.create(
+            title="Multi-move authoring", description="", created_by=self.user
+        )
+
+    def _data(self, solution_line):
+        return {
+            "questionnaire": self.questionnaire.id,
+            "question_type": "text",
+            "question": "White to play.",
+            "expected_answer": "e4 e5 Nf3",
+            "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            "solution_line_text": solution_line,
+        }
+
+    def test_legal_line_is_saved_and_first_move_is_synchronized(self):
+        form = self.form_class(data=self._data("E2E4 e7e5 G1F3"))
+        self.assertTrue(form.is_valid(), form.errors)
+        question = form.save(commit=False)
+        question.created_by = self.user
+        question.placement = 1
+        question.save()
+        self.assertEqual(question.solution_line, ["e2e4", "e7e5", "g1f3"])
+        self.assertEqual(question.solution_uci, "e2e4")
+
+    def test_illegal_line_is_rejected(self):
+        form = self.form_class(data=self._data("e2e4 e7e5 g1f4"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("Solution move 3", str(form.errors))
+
+    def test_line_must_end_with_student_move(self):
+        form = self.form_class(data=self._data("e2e4 e7e5"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("odd number of moves", str(form.errors))
+
+
+class MultiMoveImporterTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="importer-multi",
+            password="testpass",
+            email="importer-multi@example.com",
+        )
+        self.fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        self.puzzle = (
+            "multi-1", self.fen, "e2e4", "e4", "White", ["e2e4", "e7e5", "g1f3"]
+        )
+
+    def _import(self):
+        from unittest.mock import patch
+        from django.core.management import call_command
+
+        with patch(
+            "quiz.management.commands.import_lichess_puzzles.Command._iter_puzzles",
+            return_value=iter([self.puzzle]),
+        ):
+            call_command(
+                "import_lichess_puzzles",
+                motif="mate_in_2",
+                difficulty="easy",
+                count=1,
+                user=self.user.email,
+                verbosity=0,
+            )
+
+    def test_import_creates_question_with_complete_solution_line(self):
+        self._import()
+        question = Question.objects.get(fen=self.fen)
+        self.assertEqual(question.solution_uci, "e2e4")
+        self.assertEqual(question.solution_line, ["e2e4", "e7e5", "g1f3"])
+
+    def test_reimport_upgrades_existing_question_without_duplicating(self):
+        questionnaire = Questionnaire.objects.create(
+            title="Mate in 2 — Easy",
+            description="",
+            motif="mate_in_2",
+            difficulty="easy",
+            created_by=self.user,
+        )
+        question = Question.objects.create(
+            questionnaire=questionnaire,
+            question="White to play.",
+            question_type="text",
+            placement=1,
+            created_by=self.user,
+            fen=self.fen,
+            solution_uci="e2e4",
+        )
+        self._import()
+        question.refresh_from_db()
+        self.assertEqual(question.solution_line, ["e2e4", "e7e5", "g1f3"])
+        self.assertEqual(Question.objects.filter(questionnaire=questionnaire, fen=self.fen).count(), 1)

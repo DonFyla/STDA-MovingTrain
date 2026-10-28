@@ -38,7 +38,7 @@
                 {% if question.fen and question.solution_uci %}
                     <input type="hidden" name="answer" id="id_answer">
                     <div class="flex items-center justify-between gap-4">
-                        <p id="board-status" role="status" aria-live="polite" class="text-sm text-gray-500">Play your move on the board, then submit.</p>
+                        <p id="board-status" role="status" aria-live="polite" class="text-sm text-gray-500">{% if puzzle_progress %}Move {{ puzzle_progress.current }} of {{ puzzle_progress.total }} — your turn. {% endif %}Play your move on the board, then submit.</p>
                         <button type="button" id="board-reset" class="shrink-0 text-sm text-[#5E5044] underline">Reset board</button>
                     </div>
                     <dialog id="board-promotion" aria-labelledby="board-promotion-title" class="rounded-2xl border border-gray-200 p-6 shadow-xl backdrop:bg-black/50">

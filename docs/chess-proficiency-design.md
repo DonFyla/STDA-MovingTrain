@@ -297,17 +297,26 @@ Do them in order; each phase leaves the site working.
 - **Verify:** run with a small `--limit`; questions appear in admin with correct
   motif/grade/fen; re-running doesn't duplicate.
 
-### Phase 7 — Interactive move grading (✅ single-move implemented 2026-08-27)
+### Phase 7 — Interactive move grading (✅ single- and multi-move implemented)
 
-- ✅ Students play the move on the board (Chessground + chess.js legal-move dests,
-  `templates/quiz/_chessboard_interactive.html`); the move is written as UCI into the
+- Students play moves on the board (Chessground + chess.js legal-move dests,
+  `templates/quiz/_chessboard_interactive.html`); each move is written as UCI into the
   hidden `answer` field, so the POST contract of `quiz_question_view` is unchanged.
-- ✅ Grading via `_answer_is_correct` (`quiz/views.py`): exact UCI match against
+- Single-move grading uses `_answer_is_correct` (`quiz/views.py`): exact UCI match against
   `solution_uci`, falling back to option-text matching (SAN for imported puzzles).
-- Caveats: single-move puzzles only; promotion defaults to queen; board locks after a
-  move until "Reset board" is used.
-- **Still deferred:** multi-move puzzles ("mate in 2") need server-side reply state on
-  `Qtaker` (JSONField, same pattern as `current_question_set`) — design when needed.
+  Mate-in-1 also accepts any legal move that delivers mate.
+- `Question.solution_line` stores the complete UCI line, alternating student and opponent
+  moves and ending with the student. `solution_uci` remains its first move for backward
+  compatibility. The importer saves the full line and upgrades existing questions with an
+  empty `solution_line` when their FEN is encountered again.
+- Multi-move state is server-driven: `Qtaker.puzzle_state` records only the current question
+  and moves already played. After a correct intermediate move, the server applies the next
+  opponent reply and reloads the reconstructed position; future solution moves are never
+  sent to the browser. The final move is graded against the exact complete recorded line.
+- Answer review applies complete UCI lines sequentially and displays both the student's and
+  solution lines in SAN. Coaches can author an odd-length solution line with sequential
+  legality validation.
+- Alternative multi-move continuations remain deferred; only the recorded line is accepted.
 
 ---
 
@@ -347,9 +356,9 @@ Remaining from the 2026-08-27 list:
    is still open if wanted.
 2. **Badge showcase** (public profile of earned badges) — still pending; the privacy
    decisions above (logged-in only, username-only) are the template for it.
-3. **Multi-move puzzles ("mate in 2")** — the deferred half of Phase 7. Needs server-side
-   reply moves and puzzle state on `Qtaker` (JSONField, same pattern as
-   `current_question_set`). Only when mate-in-2 quizzes go live.
+3. **Alternative multi-move continuations** — multi-move puzzles are implemented with
+   server-driven replies, but currently accept only the recorded solution line. Accepting
+   alternative correct continuations remains deferred.
 
 ---
 
@@ -367,4 +376,4 @@ Remaining from the 2026-08-27 list:
    Proficiency charts and badges need a logged-in user — restrict motif quizzes to
    logged-in students, or keep an anonymous mode that just doesn't record stats?
 4. Chart presentation for unattempted motifs (zero-height bar vs hidden) and colour scheme.
-5. Multi-move puzzle UX (Phase 7) — how the server replies to the student's move.
+5. Multi-move grading (Phase 7) — whether to accept alternative correct continuations beyond the recorded line.
