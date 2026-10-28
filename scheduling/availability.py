@@ -63,6 +63,20 @@ def is_slot_available(coach, session_date, start_time, end_time, exclude_flexibl
             if max(start_m, bk_start_m) < min(end_m, bk_end_m):
                 return False
 
+        # Active subscriptions also reserve future weekly occurrences that
+        # have not yet been added to recurring_dates by schedule roll-forward.
+        if bk.subscription_status in ["cancelled", "expired"]:
+            continue
+        session_day = (session_date.weekday() + 1) % 7
+        weekly_times = [(bk.start_time, bk.end_time)]
+        if bk.start_time2 and bk.end_time2:
+            weekly_times.append((bk.start_time2, bk.end_time2))
+        for day, (bk_start, bk_end) in zip(bk.recurring_days or [], weekly_times):
+            if day != session_day:
+                continue
+            if max(start_m, to_minutes(bk_start)) < min(end_m, to_minutes(bk_end)):
+                return False
+
     # 4. Must not overlap special bookings.
     special_q = SpecialBooking.objects.filter(
         coach=coach,

@@ -352,7 +352,7 @@ def book_coach_view(request, coach_id):
         initial["student_email"] = request.user.email
         initial["student_phone"] = request.user.phone or ""
 
-    recurring_form = BookingForm(initial=initial)
+    recurring_form = BookingForm(initial=initial, coach=coach)
     points_form = PointsBookingForm(initial=initial, coach=coach)
     special_form = SpecialBookingForm(initial=initial, coach=coach)
 
@@ -360,7 +360,7 @@ def book_coach_view(request, coach_id):
         booking_type = request.POST.get("booking_type", "recurring")
 
         if booking_type == "recurring":
-            recurring_form = BookingForm(request.POST)
+            recurring_form = BookingForm(request.POST, coach=coach)
             if recurring_form.is_valid():
                 booking = recurring_form.save(coach=coach)
                 #print(f"{booking.recurring_dates[0]['start_time']} - {booking.recurring_dates[0]['end_time']} and {booking.recurring_dates[1]['start_time']} - {booking.recurring_dates[1]['end_time']} respectively")

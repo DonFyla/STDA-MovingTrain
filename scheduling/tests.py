@@ -645,6 +645,172 @@ class BookingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Fully Booked")
 
+    def test_recurring_booking_rejects_flexible_conflict(self):
+        FlexibleBooking.objects.create(
+            user=self.student_user,
+            coach=self.coach,
+            session_date=date(2026, 1, 12),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            day_of_week=1,
+            points_used=2,
+        )
+        self.client.force_login(self.student_user)
+        response = self.client.post(
+            reverse("scheduling:book_coach", args=[self.coach.id]),
+            {
+                "booking_mode": "single",
+                "day_of_week_1": "1",
+                "time_slot_1": "11:00|12:00",
+                "student_name": "Booking Student",
+                "student_email": "bookingstudent@example.com",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "scheduling/book_coach.html")
+        self.assertContains(response, "no longer available")
+        self.assertEqual(Booking.objects.count(), 0)
+
+    @patch("scheduling.views.create_payment_plan", side_effect=_mock_create_payment_plan)
+    @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
+    def test_recurring_booking_allows_cancelled_flexible_conflict(self, mock_init, mock_plan):
+        FlexibleBooking.objects.create(
+            user=self.student_user,
+            coach=self.coach,
+            session_date=date(2026, 1, 12),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            day_of_week=1,
+            points_used=2,
+            status="cancelled",
+        )
+        self.client.force_login(self.student_user)
+        response = self.client.post(
+            reverse("scheduling:book_coach", args=[self.coach.id]),
+            {
+                "booking_mode": "single",
+                "day_of_week_1": "1",
+                "time_slot_1": "11:00|12:00",
+                "student_name": "Booking Student",
+                "student_email": "bookingstudent@example.com",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "scheduling/booking_payment.html")
+        self.assertEqual(Booking.objects.count(), 1)
+
+    def test_recurring_booking_allows_adjacent_flexible_session(self):
+        from .forms import BookingForm
+
+        FlexibleBooking.objects.create(
+            user=self.student_user,
+            coach=self.coach,
+            session_date=date(2026, 1, 12),
+            start_time=time(12, 0),
+            end_time=time(13, 0),
+            day_of_week=1,
+            points_used=2,
+        )
+        form = BookingForm(
+            data={
+                "booking_mode": "single",
+                "day_of_week_1": "1",
+                "time_slot_1": "11:00|12:00",
+                "student_name": "Booking Student",
+                "student_email": "bookingstudent@example.com",
+            },
+            coach=self.coach,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_double_recurring_booking_checks_second_weekly_slot(self):
+        from .forms import BookingForm
+
+        FlexibleBooking.objects.create(
+            user=self.student_user,
+            coach=self.coach,
+            session_date=date(2026, 1, 14),
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+            day_of_week=3,
+            points_used=2,
+        )
+        form = BookingForm(
+            data={
+                "booking_mode": "double",
+                "day_of_week_1": "1",
+                "time_slot_1": "11:00|12:00",
+                "day_of_week_2": "3",
+                "time_slot_2": "14:00|15:00",
+                "student_name": "Booking Student",
+                "student_email": "bookingstudent@example.com",
+            },
+            coach=self.coach,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("2026-01-14 14:00-15:00", str(form.errors))
+
+    def _create_recurring_reservation(self, subscription_status):
+        return Booking.objects.create(
+            coach=self.coach,
+            student_name="Recurring Student",
+            student_email="recurring@example.com",
+            booking_date=date(2026, 1, 12),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[
+                {"date": "2026-01-12", "start_time": "11:00", "end_time": "12:00"}
+            ],
+            status="confirmed",
+            subscription_status=subscription_status,
+        )
+
+    def _future_points_form(self):
+        from .forms import PointsBookingForm
+
+        return PointsBookingForm(
+            data={
+                "selected_slots": json.dumps([{
+                    "date": "2026-02-16",
+                    "day_of_week": 1,
+                    "start_time": "11:00",
+                    "end_time": "12:00",
+                }]),
+                "student_name": "Points Student",
+                "student_email": "pointsstudent@example.com",
+            },
+            coach=self.coach,
+        )
+
+    def test_points_booking_rejects_future_active_recurring_occurrence(self):
+        self._create_recurring_reservation("active")
+        form = self._future_points_form()
+        self.assertFalse(form.is_valid())
+        self.assertIn("no longer available", str(form.errors))
+
+    def test_points_booking_allows_cancelled_subscription_after_paid_sessions(self):
+        self._create_recurring_reservation("cancelled")
+        form = self._future_points_form()
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_booking_page_exposes_flexible_booked_slots(self):
+        FlexibleBooking.objects.create(
+            user=self.student_user,
+            coach=self.coach,
+            session_date=date(2026, 1, 12),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            day_of_week=1,
+            points_used=2,
+        )
+        self.client.force_login(self.student_user)
+        response = self.client.get(reverse("scheduling:book_coach", args=[self.coach.id]))
+        booked = json.loads(response.context["booked_slots_flexible_json"])
+        self.assertEqual(
+            booked["2026-01-12"], [{"start": "11:00", "end": "12:00"}]
+        )
+
     @patch("scheduling.views.create_payment_plan", side_effect=_mock_create_payment_plan)
     @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
     def test_recurring_booking_sends_creation_emails(self, mock_init, mock_plan):

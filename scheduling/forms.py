@@ -184,6 +184,10 @@ class BookingForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
+    def __init__(self, *args, coach=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.coach = coach
+
     def clean(self):
         cleaned = super().clean()
         mode = cleaned.get("booking_mode", "single")
@@ -229,6 +233,29 @@ class BookingForm(forms.ModelForm):
         validate_minimum_notice(first_session_date(day_1), cleaned["start_time_1"])
         if mode == "double":
             validate_minimum_notice(first_session_date(day_2), cleaned["start_time_2"])
+
+        if self.coach:
+            from .availability import is_slot_available
+
+            weekly_slots = [
+                (day_1, cleaned["start_time_1"], cleaned["end_time_1"]),
+            ]
+            if mode == "double":
+                weekly_slots.append(
+                    (day_2, cleaned["start_time_2"], cleaned["end_time_2"])
+                )
+            for day, start_time, end_time in weekly_slots:
+                first_date = first_session_date(day)
+                for week in range(4):
+                    session_date = first_date + timedelta(weeks=week)
+                    if not is_slot_available(
+                        self.coach, session_date, start_time, end_time
+                    ):
+                        raise forms.ValidationError(
+                            f"{session_date.isoformat()} {start_time.strftime('%H:%M')}-"
+                            f"{end_time.strftime('%H:%M')} is no longer available. "
+                            "Please refresh the page and select another slot."
+                        )
 
         return cleaned
 

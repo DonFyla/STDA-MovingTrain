@@ -645,6 +645,26 @@
         return booked.some(b => b.start < slot.end_time && b.end > slot.start_time);
     }
 
+    function isRecurringSlotUnavailable(dayIndex, slot) {
+        if (isSlotBookedRecurring(dayIndex, slot)) return true;
+
+        const today = getLagosToday();
+        let daysAhead = dayIndex - today.getDay();
+        if (daysAhead <= 0) daysAhead += 7;
+
+        for (let week = 0; week < 4; week++) {
+            const sessionDate = new Date(today);
+            sessionDate.setDate(today.getDate() + daysAhead + week * 7);
+            const dateStr = formatDateLagos(sessionDate);
+            if (isSlotBookedFlexible(dateStr, slot.start_time, slot.end_time) ||
+                isSlotBookedSpecial(dateStr, slot.start_time, slot.end_time) ||
+                isSlotBlocked(dateStr, slot.start_time, slot.end_time)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function updateRecurringMode() {
         const mode = document.querySelector('input[name="booking_mode"]:checked').value;
         const session2 = document.getElementById('r-session-2');
@@ -731,7 +751,7 @@
         list.innerHTML = '';
         const selectedSlot = session === 1 ? rSelectedSlot1 : rSelectedSlot2;
         slotsByDay[dayIndex].forEach(slot => {
-            const booked = isSlotBookedRecurring(dayIndex, slot);
+            const booked = isRecurringSlotUnavailable(dayIndex, slot);
             const isSelected = selectedSlot && selectedSlot.start_time === slot.start_time && selectedSlot.end_time === slot.end_time;
             const btn = document.createElement('button');
             btn.type = 'button';
