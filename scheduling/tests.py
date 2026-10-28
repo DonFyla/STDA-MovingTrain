@@ -481,6 +481,8 @@ class BookingFlowTests(TestCase):
         self.assertEqual(booking.payment_status, "pending")
         self.assertTrue(booking.payment_reference.startswith("BK-"))
         self.assertEqual(booking.flutterwave_payment_plan_id, "3807")
+        self.assertIsNone(booking.start_time2)
+        self.assertIsNone(booking.end_time2)
 
     @patch("scheduling.views.create_payment_plan", side_effect=_mock_create_payment_plan)
     @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
@@ -510,6 +512,8 @@ class BookingFlowTests(TestCase):
         self.assertEqual(booking.flutterwave_payment_plan_id, "3807")
         self.assertEqual(sorted(booking.recurring_days), [1, 3])
         self.assertEqual(len(booking.recurring_dates), 8)
+        self.assertEqual(booking.start_time2, time(14, 0))
+        self.assertEqual(booking.end_time2, time(15, 0))
 
     def test_booking_rejects_same_day_for_double(self):
         self.client.force_login(self.student_user)
@@ -526,6 +530,24 @@ class BookingFlowTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(Booking.objects.count(), 0)
+
+    def test_booking_rejects_invalid_second_time_slot(self):
+        self.client.force_login(self.student_user)
+        response = self.client.post(
+            reverse("scheduling:book_coach", args=[self.coach.id]),
+            {
+                "booking_mode": "double",
+                "day_of_week_1": "1",
+                "time_slot_1": "11:00|12:00",
+                "day_of_week_2": "3",
+                "time_slot_2": "not-a-time|15:00",
+                "student_name": "Booking Student",
+                "student_email": "bookingstudent@example.com",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid time slot selected for the second session.")
         self.assertEqual(Booking.objects.count(), 0)
 
     def test_booking_confirmation_page(self):

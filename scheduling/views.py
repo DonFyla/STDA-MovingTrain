@@ -303,14 +303,12 @@ def book_coach_view(request, coach_id):
             day = (session_date.weekday() + 1) % 7
             start = session.get("start_time")
             end = session.get("end_time")
-            #print(f"start time:{start}"); print(f"end time:{end}")
             if not start or not end:
                 continue
             key = (day, start, end)
             if key not in seen_recurring_slots:
                 seen_recurring_slots.add(key)
                 booked_slots_recurring[day].append({"start": start, "end": end})
-    #print(f"{booking.recurring_dates[0]['start_time']} - {booking.recurring_dates[0]['end_time']} and {booking.recurring_dates[1]['start_time']} - {booking.recurring_dates[1]['end_time']} respectively")            
 
     # Existing flexible bookings for points tab
     existing_flexible = coach.flexible_bookings.exclude(status="cancelled")
@@ -363,8 +361,6 @@ def book_coach_view(request, coach_id):
             recurring_form = BookingForm(request.POST, coach=coach)
             if recurring_form.is_valid():
                 booking = recurring_form.save(coach=coach)
-                #print(f"{booking.recurring_dates[0]['start_time']} - {booking.recurring_dates[0]['end_time']} and {booking.recurring_dates[1]['start_time']} - {booking.recurring_dates[1]['end_time']} respectively")
-
 
                 # Create a Flutterwave payment plan for the recurring subscription
                 plan_result = create_payment_plan(

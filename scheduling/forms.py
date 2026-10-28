@@ -215,7 +215,7 @@ class BookingForm(forms.ModelForm):
                 start_2, end_2 = slot_2.split("|")
                 cleaned["start_time_2"] = forms.TimeField().clean(start_2)
                 cleaned["end_time_2"] = forms.TimeField().clean(end_2)
-            except ValueError:
+            except (ValueError, forms.ValidationError):
                 raise forms.ValidationError("Invalid time slot selected for the second session.")
 
         # The first session of each weekly slot must be at least 24 hours away
