@@ -40,10 +40,10 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    # Runs send_session_reminders and extend_recurring_schedules every 5
+    # Runs send_session_reminders and reconcile_recurring_schedules every 5
     # minutes (the reminder window is ±10 min around the 1-hour mark, so
     # nothing is missed or doubled).
-    command: sh -c "while true; do python manage.py send_session_reminders; python manage.py extend_recurring_schedules; python manage.py sync_flutterwave_subscriptions; sleep 300; done"
+    command: sh -c "while true; do python manage.py send_session_reminders; python manage.py reconcile_recurring_schedules; python manage.py sync_flutterwave_subscriptions; sleep 300; done"
     volumes:
       - .:/app
     env_file:

@@ -1622,22 +1622,22 @@ class SessionReminderTests(TestCase):
             self.assertEqual(SessionReminder.objects.count(), 1)
 
 
-class RecurringScheduleExtensionTests(TestCase):
-    """extend_due_subscriptions: active subscriptions whose stored sessions are
-    running out get the next month appended; everyone else is untouched."""
+
+class RecurringScheduleAlignmentTests(TestCase):
+    """Schedules must reflect paid entitlement: a payment covers sessions up
+    to payment_date + 30 days. Paid classes stay (even when cancelled);
+    unpaid future sessions are pruned (e.g. after a declined renewal)."""
 
     def setUp(self):
         self.coach = Coach.objects.create(
-            name="Recur Coach",
-            email="recurcoach@example.com",
-            specialization="Openings",
+            name="Align Coach",
+            email="aligncoach@example.com",
         )
-        # 4 Mondays starting 5 weeks ago → the last session is ~2 weeks in the
-        # past, i.e. the schedule has run dry while billing continues.
+        # Four Mondays starting three weeks ago.
         today = date.today()
-        first = today - timedelta(weeks=5)
+        first = today - timedelta(weeks=3)
         first += timedelta(days=(0 - first.weekday()) % 7)  # roll forward to Monday
-        self.due_dates = [
+        self.base_dates = [
             {
                 "date": (first + timedelta(weeks=w)).isoformat(),
                 "start_time": "10:00",
@@ -1645,120 +1645,92 @@ class RecurringScheduleExtensionTests(TestCase):
             }
             for w in range(4)
         ]
-        self.due_booking = Booking.objects.create(
-            coach=self.coach,
-            student_name="Due Student",
-            student_email="due@example.com",
-            booking_date=date.fromisoformat(self.due_dates[0]["date"]),
-            start_time=time(10, 0),
-            end_time=time(11, 0),
-            recurring_days=[1],
-            recurring_dates=[dict(s) for s in self.due_dates],
-            sessions_per_month=4,
-            monthly_amount=40000,
-            status="confirmed",
-            subscription_status="active",
-        )
 
-    def _future_dates(self, weeks=4):
-        today = date.today()
-        return [
-            {
-                "date": (today + timedelta(weeks=w)).isoformat(),
-                "start_time": "10:00",
-                "end_time": "11:00",
-            }
-            for w in range(weeks)
+    def _booking(self, payment_days_ago=None, subscription_status="active",
+                 status="confirmed", dates=None):
+        recurring_dates = dates if dates is not None else [
+            dict(s) for s in self.base_dates
         ]
-
-    def _extra_booking(self, recurring_dates, **kwargs):
-        defaults = dict(
+        try:
+            booking_date = date.fromisoformat(recurring_dates[0]["date"])
+        except (ValueError, IndexError, KeyError):
+            booking_date = date.today()
+        kwargs = {}
+        if payment_days_ago is not None:
+            kwargs["payment_date"] = timezone.now() - timedelta(days=payment_days_ago)
+        return Booking.objects.create(
             coach=self.coach,
-            student_name="Other Student",
-            student_email="other@example.com",
-            booking_date=date.today(),
+            student_name="Align Student",
+            student_email="align@example.com",
+            booking_date=booking_date,
             start_time=time(10, 0),
             end_time=time(11, 0),
             recurring_days=[1],
             recurring_dates=recurring_dates,
             sessions_per_month=4,
             monthly_amount=40000,
-            status="confirmed",
-            subscription_status="active",
+            status=status,
+            subscription_status=subscription_status,
+            **kwargs,
         )
-        defaults.update(kwargs)
-        return Booking.objects.create(**defaults)
 
-    def test_due_subscription_gets_next_month_appended(self):
-        call_command("extend_recurring_schedules")
-        self.due_booking.refresh_from_db()
-        self.assertEqual(len(self.due_booking.recurring_dates), 8)
-        # Original sessions preserved in order, then 4 new weekly Mondays.
-        self.assertEqual(self.due_booking.recurring_dates[:4], self.due_dates)
-        last_old = date.fromisoformat(self.due_dates[-1]["date"])
-        for w in range(4):
-            session = self.due_booking.recurring_dates[4 + w]
-            self.assertEqual(
-                session["date"], (last_old + timedelta(weeks=w + 1)).isoformat()
-            )
-            self.assertEqual(session["start_time"], "10:00")
-            self.assertEqual(session["end_time"], "11:00")
+    def _future_dates(self, booking):
+        today = date.today().isoformat()
+        return [s for s in booking.recurring_dates if s["date"] >= today]
 
-    def test_extension_is_idempotent(self):
-        call_command("extend_recurring_schedules")
-        call_command("extend_recurring_schedules")
-        self.due_booking.refresh_from_db()
-        self.assertEqual(len(self.due_booking.recurring_dates), 8)
-
-    def test_future_schedule_not_touched(self):
-        booking = self._extra_booking(self._future_dates())
-        call_command("extend_recurring_schedules")
+    def test_paid_up_booking_gets_sessions_through_paid_window(self):
+        booking = self._booking(payment_days_ago=10)
+        entitlement_end = (timezone.now() - timedelta(days=10) + timedelta(days=30)).date()
+        call_command("reconcile_recurring_schedules")
         booking.refresh_from_db()
-        self.assertEqual(len(booking.recurring_dates), 4)
-
-    def test_unconfirmed_or_cancelled_not_touched(self):
-        pending = self._extra_booking(self.due_dates, status="pending")
-        cancelled = self._extra_booking(
-            self.due_dates, subscription_status="cancelled"
+        self.assertTrue(self._future_dates(booking), "paid-up booking should have future sessions")
+        self.assertTrue(
+            all(date.fromisoformat(s["date"]) < entitlement_end for s in booking.recurring_dates),
+            "no session may exist beyond the paid window",
         )
-        call_command("extend_recurring_schedules")
-        pending.refresh_from_db()
-        cancelled.refresh_from_db()
-        self.assertEqual(len(pending.recurring_dates), 4)
-        self.assertEqual(len(cancelled.recurring_dates), 4)
-        # Only the confirmed active booking was extended.
-        self.due_booking.refresh_from_db()
-        self.assertEqual(len(self.due_booking.recurring_dates), 8)
 
-    def test_double_weekly_extends_each_day_with_its_own_time(self):
-        today = date.today()
-        monday = today - timedelta(weeks=5)
-        monday += timedelta(days=(0 - monday.weekday()) % 7)
-        wednesday = monday + timedelta(days=2)
-        dates = (
-            [
-                {"date": (monday + timedelta(weeks=w)).isoformat(), "start_time": "10:00", "end_time": "11:00"}
-                for w in range(4)
-            ]
-            + [
-                {"date": (wednesday + timedelta(weeks=w)).isoformat(), "start_time": "14:00", "end_time": "15:00"}
-                for w in range(4)
-            ]
-        )
-        booking = self._extra_booking(dates, recurring_days=[1, 3])
-        call_command("extend_recurring_schedules")
+    def test_declined_renewal_prunes_upcoming_sessions(self):
+        # Last payment 40 days ago: the paid window is ~10 days in the past,
+        # so every upcoming session is unpaid and must be removed.
+        booking = self._booking(payment_days_ago=40)
+        call_command("reconcile_recurring_schedules")
         booking.refresh_from_db()
-        self.assertEqual(len(booking.recurring_dates), 16)
-        new_sessions = booking.recurring_dates[8:]
-        monday_sessions = [s for s in new_sessions if date.fromisoformat(s["date"]).weekday() == 0]
-        wednesday_sessions = [s for s in new_sessions if date.fromisoformat(s["date"]).weekday() == 2]
-        self.assertEqual(len(monday_sessions), 4)
-        self.assertEqual(len(wednesday_sessions), 4)
-        self.assertTrue(all(s["start_time"] == "10:00" for s in monday_sessions))
-        self.assertTrue(all(s["start_time"] == "14:00" for s in wednesday_sessions))
+        self.assertEqual(self._future_dates(booking), [])
+        self.assertTrue(booking.recurring_dates, "past sessions are kept as history")
+
+    def test_cancelled_booking_keeps_paid_classes(self):
+        # Cancelled with classes still inside the paid window: those stay;
+        # anything beyond the window goes.
+        booking = self._booking(
+            payment_days_ago=10,
+            subscription_status="cancelled",
+            status="cancelled",
+        )
+        entitlement_end = (timezone.now() - timedelta(days=10) + timedelta(days=30)).date()
+        call_command("reconcile_recurring_schedules")
+        booking.refresh_from_db()
+        future = self._future_dates(booking)
+        self.assertTrue(future, "cancelled subscriber keeps paid classes")
+        self.assertTrue(
+            all(date.fromisoformat(s["date"]) < entitlement_end for s in booking.recurring_dates)
+        )
+
+    def test_pending_unpaid_booking_untouched(self):
+        booking = self._booking(payment_days_ago=None, subscription_status="", status="pending")
+        call_command("reconcile_recurring_schedules")
+        booking.refresh_from_db()
+        self.assertEqual(booking.recurring_dates, self.base_dates)
+
+    def test_alignment_is_idempotent(self):
+        self._booking(payment_days_ago=10)
+        call_command("reconcile_recurring_schedules")
+        first = Booking.objects.get().recurring_dates
+        call_command("reconcile_recurring_schedules")
+        second = Booking.objects.get().recurring_dates
+        self.assertEqual(first, second)
 
     def test_malformed_session_entries_do_not_crash(self):
-        booking = self._extra_booking([{"date": "not-a-date"}, {}])
-        call_command("extend_recurring_schedules")  # must not raise
+        booking = self._booking(payment_days_ago=10, dates=[{"date": "not-a-date"}, {}])
+        call_command("reconcile_recurring_schedules")  # must not raise
         booking.refresh_from_db()
         self.assertEqual(booking.recurring_dates, [{"date": "not-a-date"}, {}])

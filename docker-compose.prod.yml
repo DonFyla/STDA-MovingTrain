@@ -79,7 +79,7 @@ services:
       dockerfile: docker/Dockerfile
     command: >
       sh -c "while true; do python manage.py send_session_reminders;
-      python manage.py extend_recurring_schedules;
+      python manage.py reconcile_recurring_schedules;
       python manage.py sync_flutterwave_subscriptions; sleep 300; done"
     env_file:
       - .env
