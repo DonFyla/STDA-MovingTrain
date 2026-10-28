@@ -907,6 +907,28 @@ class BoardGradingTests(TestCase):
         self.assertEqual(qtaker.current_score, 0)
         self.assertFalse(qtaker.questionresult_set.get().correct)
 
+    def test_interactive_question_renders_accessible_move_controls(self):
+        qtaker = Qtaker.objects.create(name="B", email="board@example.com", user=self.user)
+        qtaker.current_question_set = [self.question.id]
+        qtaker.save()
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("quiz:question", args=[qtaker.id, self.question.id])
+        )
+        self.assertContains(response, 'id="board-submit" disabled')
+        self.assertContains(response, 'role="status" aria-live="polite"')
+        for piece in ("q", "r", "b", "n"):
+            self.assertContains(response, f'data-promotion="{piece}"')
+
+    def test_answer_page_renders_move_review_and_solution_fallback(self):
+        qtaker = self._play("a1a8")
+        response = self.client.get(reverse("quiz:answer", args=[qtaker.id, 0]))
+        self.assertContains(response, 'data-review-controls')
+        self.assertContains(response, 'data-user-move="a1a8"')
+        self.assertContains(response, 'data-solution-move="a1a8"')
+        self.assertContains(response, '<p class="text-green-700 mb-4">Ra8#</p>', html=True)
+        self.assertContains(response, '<p class="text-green-700">a1a8</p>', html=True)
+
 
 class MotifProgressionTests(TestCase):
     """Passing a motif quiz should offer the same motif at the next difficulty,

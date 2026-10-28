@@ -2,15 +2,58 @@
 {# Include once per page inside {% block extra_js %}. CSS goes to extra_css.  #}
 <script type="module">
     import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9/+esm';
+    import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm';
 
     document.querySelectorAll('.quiz-board').forEach(function (el) {
         const fen = el.dataset.fen;
-        Chessground(el, {
+        const board = Chessground(el, {
             fen: fen,
             // Board faces the side to move — the student plays from that side.
             orientation: fen.split(' ')[1] === 'b' ? 'black' : 'white',
             viewOnly: true,
             coordinates: true,
+            highlight: { lastMove: true },
         });
+
+        if (!el.dataset.solutionMove) return;
+        const controls = document.querySelector('[data-review-controls]');
+        if (!controls) return;
+
+        function reviewPosition(uci) {
+            const game = new Chess(fen);
+            if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(uci || '')) {
+                return { fen: fen, lastMove: [] };
+            }
+            try {
+                const move = game.move({
+                    from: uci.slice(0, 2),
+                    to: uci.slice(2, 4),
+                    promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+                });
+                return { fen: game.fen(), lastMove: [move.from, move.to] };
+            } catch (error) {
+                return { fen: fen, lastMove: [] };
+            }
+        }
+
+        function showReviewMove(kind) {
+            const uci = kind === 'user' ? el.dataset.userMove : el.dataset.solutionMove;
+            board.set(reviewPosition(uci));
+            controls.querySelectorAll('[data-review-move]').forEach(function (button) {
+                const selected = button.dataset.reviewMove === kind;
+                button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                button.classList.toggle('bg-[#5E5044]', selected);
+                button.classList.toggle('text-white', selected);
+                button.classList.toggle('bg-white', !selected);
+                button.classList.toggle('text-[#5E5044]', !selected);
+            });
+        }
+
+        controls.querySelectorAll('[data-review-move]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                showReviewMove(button.dataset.reviewMove);
+            });
+        });
+        showReviewMove('user');
     });
 </script>

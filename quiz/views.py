@@ -280,7 +280,19 @@ def quiz_answer_view(request, qtaker_id, answer_id):
         question = get_object_or_404(Question, id=qtaker.last_question_id)
         user_answer_text = qtaker.last_text_answer
         is_correct = _answer_is_correct(question, user_answer_text)
-        chosen_answer = {"id": 0, "text": user_answer_text, "correct": is_correct}
+        display_answer = user_answer_text
+        if question.fen and user_answer_text:
+            try:
+                board = chess.Board(question.fen)
+                display_answer = board.san(board.parse_uci(user_answer_text))
+            except ValueError:
+                pass
+        chosen_answer = {
+            "id": 0,
+            "text": user_answer_text,
+            "display_text": display_answer,
+            "correct": is_correct,
+        }
     else:
         chosen_answer_obj = get_object_or_404(Options, pk=answer_id_int)
         question = chosen_answer_obj.question

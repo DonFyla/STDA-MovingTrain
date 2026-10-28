@@ -22,6 +22,18 @@
   background-color: rgba(255, 213, 79, 0.45);
 }
 
+.quiz-board.cg-wrap cg-board square.selected {
+  background-color: rgba(72, 149, 112, 0.6);
+}
+
+.quiz-board.cg-wrap cg-board square.move-dest {
+  background-color: rgba(72, 149, 112, 0.28);
+}
+
+.quiz-board.cg-wrap cg-board square.check {
+  background-color: rgba(211, 47, 47, 0.55);
+}
+
 /* Coordinates: neutralize global CSS (Tailwind preflight etc.) and pin the
  * strips to the board edges. NB: chessground puts the cg-wrap class on the
  * .quiz-board element itself, and coords live in cg-container — NOT inside a

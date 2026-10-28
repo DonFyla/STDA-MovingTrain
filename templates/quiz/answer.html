@@ -21,13 +21,19 @@
             <p class="font-medium text-gray-700 mb-2">Question:</p>
             <div class="mb-4">{{ question.question|safe }}</div>
 
-            {% include "quiz/_chessboard.html" %}
+            {% include "quiz/_chessboard.html" with review_user_move=chosen_answer.text review_solution_move=question.solution_uci %}
+            {% if question.solution_uci and chosen_answer.text %}
+                <div data-review-controls class="flex justify-center gap-3 mb-4" aria-label="Review board moves">
+                    <button type="button" data-review-move="user" aria-pressed="true" class="px-4 py-2 rounded-full border border-gray-300 bg-[#5E5044] text-white text-sm font-medium">Your move</button>
+                    <button type="button" data-review-move="solution" aria-pressed="false" class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Correct move</button>
+                </div>
+            {% endif %}
 
             <p class="font-medium text-gray-700 mb-1">Your answer:</p>
-            <p class="{% if is_correct %}text-green-700{% else %}text-red-700{% endif %} mb-4">{{ chosen_answer.text }}</p>
+            <p class="{% if is_correct %}text-green-700{% else %}text-red-700{% endif %} mb-4">{{ chosen_answer.display_text|default:chosen_answer.text }}</p>
 
             <p class="font-medium text-gray-700 mb-1">Correct answer:</p>
-            <p class="text-green-700">{{ correct_answer.text }}</p>
+            <p class="text-green-700">{{ correct_answer.text|default:question.solution_uci }}</p>
         </div>
 
         <p class="text-gray-600 mb-6">Current score: <span class="font-semibold">{{ score }}</span></p>

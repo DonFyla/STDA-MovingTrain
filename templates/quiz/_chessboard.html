@@ -2,6 +2,6 @@
 {# assets block (quiz/_chessboard_assets.html) to be loaded by the page.    #}
 {% if question.fen %}
     <div class="mb-6 flex justify-center">
-        <div class="quiz-board" data-fen="{{ question.fen }}" style="width: 100%; max-width: 400px; aspect-ratio: 1;"></div>
+        <div class="quiz-board" data-fen="{{ question.fen }}" {% if review_user_move %}data-user-move="{{ review_user_move }}"{% endif %} {% if review_solution_move %}data-solution-move="{{ review_solution_move }}"{% endif %} style="width: 100%; max-width: 400px; aspect-ratio: 1;"></div>
     </div>
 {% endif %}
