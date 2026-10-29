@@ -573,6 +573,17 @@ def quiz_result_view(request, qtaker_id):
             )
         _record_level_up_activity(qtaker, session_questionnaire)
 
+    if session_questionnaire and session_questionnaire.motif:
+        retake_url = reverse(
+            "quiz:motif_quiz",
+            kwargs={
+                "motif": session_questionnaire.motif,
+                "difficulty": session_questionnaire.difficulty,
+            },
+        )
+    else:
+        retake_url = f"{reverse('quiz:register')}?skill={original_skill}"
+
     context = {
         "qtaker": qtaker,
         "score": score_for_template,
@@ -580,6 +591,7 @@ def quiz_result_view(request, qtaker_id):
         "percentage": percent,
         "passed": passed,
         "next_questionnaire": next_questionnaire_data,
+        "retake_url": retake_url,
         "course_slug": None if (session_questionnaire and session_questionnaire.motif) else qtaker.skill,
         "quiz_url": request.build_absolute_uri(reverse("quiz:register")),
         "result_share_text": f"I scored {percent:.0f}% on the Moving Train Chess Quiz! Can you beat me?",

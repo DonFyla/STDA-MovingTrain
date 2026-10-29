@@ -169,6 +169,9 @@ class QuizTemplateTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "quiz/result.html")
         self.assertEqual(response.context["score"], 1)
+        retake_url = reverse("quiz:register") + "?skill=beginner"
+        self.assertEqual(response.context["retake_url"], retake_url)
+        self.assertContains(response, f'href="{retake_url}"')
         qtaker.refresh_from_db()
         self.assertEqual(qtaker.test_result, 100.0)
 
@@ -598,6 +601,15 @@ class MotifQuizTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "quiz/question.html")
+
+    def test_result_retake_url_preserves_motif_and_difficulty(self):
+        self.client.force_login(self.user)
+        self.client.get(reverse("quiz:motif_quiz", args=["pins", "easy"]))
+        qtaker = Qtaker.objects.get(user=self.user)
+        response = self.client.get(reverse("quiz:result", args=[qtaker.id]))
+        retake_url = reverse("quiz:motif_quiz", args=["pins", "easy"])
+        self.assertEqual(response.context["retake_url"], retake_url)
+        self.assertContains(response, f'href="{retake_url}"')
 
     def test_unknown_motif_redirects_with_message(self):
         self.client.force_login(self.user)
