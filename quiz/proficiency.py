@@ -24,7 +24,9 @@ def get_proficiency(user):
         .select_related("question__questionnaire", "qtaker")
     )
 
-    # Group results by (motif, difficulty), tracking sessions and best score.
+    # Group results by (motif, difficulty) and qtaker. A qtaker can progress
+    # through several levels, so its single test_result field only describes the
+    # latest level. Calculate each level's score from its own results instead.
     pairs = {}
     for result in results:
         questionnaire = result.question.questionnaire
@@ -33,15 +35,19 @@ def get_proficiency(user):
         if not motif or not difficulty:
             continue  # legacy questionnaire — not part of the proficiency chart
 
-        pair = pairs.setdefault((motif, difficulty), {"sessions": set(), "best_score": 0.0})
-        qtaker = result.qtaker
-        if qtaker.id not in pair["sessions"]:
-            pair["sessions"].add(qtaker.id)
-            if qtaker.test_result is not None:
-                pair["best_score"] = max(pair["best_score"], qtaker.test_result)
+        pair = pairs.setdefault((motif, difficulty), {"sessions": {}, "best_score": 0.0})
+        session = pair["sessions"].setdefault(
+            result.qtaker_id, {"correct": 0, "total": 0}
+        )
+        session["total"] += 1
+        if result.correct:
+            session["correct"] += 1
 
     stats = {}
     for (motif, difficulty), pair in pairs.items():
+        for session in pair["sessions"].values():
+            score = session["correct"] * 100 / session["total"]
+            pair["best_score"] = max(pair["best_score"], score)
         motif_stats = stats.setdefault(motif, {"attempts": 0, "best_score": 0.0, "passed": set()})
         motif_stats["attempts"] += len(pair["sessions"])
         motif_stats["best_score"] = max(motif_stats["best_score"], pair["best_score"])

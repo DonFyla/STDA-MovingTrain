@@ -781,23 +781,27 @@ class ProficiencyTests(TestCase):
             difficulty=difficulty,
             created_by=self.user,
         )
-        question = Question.objects.create(
-            questionnaire=questionnaire,
-            question="Q",
-            question_type="text",
-            placement=1,
-            created_by=self.user,
-            is_approved=True,
-        )
         qtaker = Qtaker.objects.create(
             name="Prof",
             email="prof@example.com",
             user=self.user,
             test_result=test_result,
         )
-        QuestionResult.objects.create(
-            qtaker=qtaker, question=question, correct=True, answer_given="x"
-        )
+        for placement in range(1, 11):
+            question = Question.objects.create(
+                questionnaire=questionnaire,
+                question="Q",
+                question_type="text",
+                placement=placement,
+                created_by=self.user,
+                is_approved=True,
+            )
+            QuestionResult.objects.create(
+                qtaker=qtaker,
+                question=question,
+                correct=placement <= test_result / 10,
+                answer_given="x",
+            )
         return qtaker
 
     def test_new_user_has_all_motifs_at_zero(self):
@@ -826,6 +830,36 @@ class ProficiencyTests(TestCase):
         self.assertIsNone(entry["level"])
         self.assertEqual(entry["level_value"], 0)
         self.assertEqual(entry["attempts"], 1)
+
+    def test_failed_next_level_does_not_erase_previous_pass(self):
+        qtaker = Qtaker.objects.create(
+            name="Prof", email="prof@example.com", user=self.user, test_result=0.0
+        )
+        for difficulty, correct in (("easy", True), ("medium", False)):
+            questionnaire = Questionnaire.objects.create(
+                title=f"Pins — {difficulty}",
+                description="",
+                motif="pins",
+                difficulty=difficulty,
+                created_by=self.user,
+            )
+            question = Question.objects.create(
+                questionnaire=questionnaire,
+                question="Q",
+                question_type="text",
+                placement=1,
+                created_by=self.user,
+                is_approved=True,
+            )
+            QuestionResult.objects.create(
+                qtaker=qtaker, question=question, correct=correct, answer_given="x"
+            )
+
+        entry = next(e for e in get_proficiency(self.user) if e["motif"] == "pins")
+        self.assertEqual(entry["level"], "easy")
+        self.assertEqual(entry["level_value"], 1)
+        self.assertEqual(entry["attempts"], 2)
+        self.assertEqual(entry["best_score"], 100.0)
 
     def test_legacy_questionnaire_excluded(self):
         legacy = Questionnaire.objects.create(
