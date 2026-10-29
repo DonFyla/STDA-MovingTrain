@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from .models import Questionnaire, Question, Qtaker, Options, QuestionResult, Activity
 from .forms import CoachQuestionForm, QtakerForm, AnswerForm
 
@@ -306,6 +306,18 @@ def quiz_question_view(request, qtaker_id, question_id):
                             "played_line": played_line,
                         }
                         qtaker.save(update_fields=["puzzle_state"])
+                        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                            return JsonResponse(
+                                {
+                                    "status": "continue",
+                                    "opponent_move": opponent_move,
+                                    "fen": puzzle_board.fen(),
+                                    "progress": {
+                                        "current": len(played_line) // 2 + 1,
+                                        "total": (len(solution_line) + 1) // 2,
+                                    },
+                                }
+                            )
                         return redirect(
                             "quiz:question", qtaker_id=qtaker.id, question_id=question.id
                         )
@@ -327,11 +339,13 @@ def quiz_question_view(request, qtaker_id, question_id):
             )
 
             # Scoring is applied when viewing the answer details page.
-            return redirect(
+            answer_url = reverse(
                 "quiz:answer",
-                qtaker_id=qtaker.id,
-                answer_id=stored_answer_id,
+                kwargs={"qtaker_id": qtaker.id, "answer_id": stored_answer_id},
             )
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"status": "complete", "answer_url": answer_url})
+            return redirect(answer_url)
     else:
         form = AnswerForm(question=question)
 

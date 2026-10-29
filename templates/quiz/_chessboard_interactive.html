@@ -1,19 +1,19 @@
-{# Interactive board for questions with fen + solution_uci: the student plays #}
-{# a legal move, which is written as UCI into the hidden #id_answer field.    #}
+{# Interactive board for questions with fen + solution_uci: a legal move is #}
+{# written as UCI into #id_answer and automatically submitted for validation. #}
 <script type="module">
     import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9/+esm';
     import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm';
 
     const el = document.querySelector('.quiz-board');
+    const answerForm = document.getElementById('quiz-answer-form');
     const answerInput = document.getElementById('id_answer');
     const status = document.getElementById('board-status');
-    const resetBtn = document.getElementById('board-reset');
-    const submitBtn = document.getElementById('board-submit');
     const promotionDialog = document.getElementById('board-promotion');
     const promotionCancel = document.getElementById('board-promotion-cancel');
     const startFen = el.dataset.fen;
     let chess = new Chess(startFen);
     let pendingPromotion = null;
+    let validating = false;
     const sideToMove = chess.turn() === 'w' ? 'white' : 'black';
 
     function legalDests() {
@@ -60,8 +60,8 @@
 
         board.set({ fen: chess.fen(), viewOnly: true, lastMove: [orig, dest] });
         answerInput.value = orig + dest + (move.promotion || '');
-        submitBtn.disabled = false;
-        setStatus('Move selected: ' + move.san + ' — press Submit.');
+        setStatus('Checking ' + move.san + '…');
+        answerForm.requestSubmit();
     }
 
     function onMove(orig, dest) {
@@ -90,9 +90,66 @@
             movable: { color: sideToMove, dests: legalDests() },
         });
         answerInput.value = '';
-        submitBtn.disabled = true;
-        setStatus('Play your move on the board, then submit.');
+        setStatus('Play your move on the board.');
     }
+
+    function applyOpponentReply(data) {
+        const uci = data.opponent_move;
+        const move = chess.move({
+            from: uci.slice(0, 2),
+            to: uci.slice(2, 4),
+            promotion: uci.length === 5 ? uci[4] : undefined,
+        });
+        if (chess.fen() !== data.fen) {
+            throw new Error('The server position does not match the board.');
+        }
+        board.set({
+            fen: data.fen,
+            viewOnly: false,
+            turnColor: sideToMove,
+            lastMove: [move.from, move.to],
+            movable: { color: sideToMove, dests: legalDests() },
+        });
+        answerInput.value = '';
+        validating = false;
+        setStatus(
+            'Move ' + data.progress.current + ' of ' + data.progress.total +
+            ' — your turn. Play your move on the board.'
+        );
+    }
+
+    answerForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (validating || !answerInput.value) return;
+        validating = true;
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                body: new FormData(answerForm),
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            if (!response.ok) throw new Error('Move validation failed.');
+            const data = await response.json();
+            if (data.answer_url) {
+                window.location.assign(data.answer_url);
+                return;
+            }
+            if (data.status === 'continue') {
+                applyOpponentReply(data);
+                return;
+            }
+            throw new Error('Unexpected validation response.');
+        } catch (error) {
+            setStatus('The connection was interrupted. Reloading the puzzle…');
+            window.setTimeout(function () {
+                window.location.reload();
+            }, 800);
+        }
+    });
 
     document.querySelectorAll('[data-promotion]').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -106,10 +163,6 @@
 
     promotionCancel.addEventListener('click', resetBoard);
     promotionDialog.addEventListener('cancel', function (event) {
-        event.preventDefault();
-        resetBoard();
-    });
-    resetBtn.addEventListener('click', function (event) {
         event.preventDefault();
         resetBoard();
     });

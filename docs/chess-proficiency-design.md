@@ -301,7 +301,11 @@ Do them in order; each phase leaves the site working.
 
 - Students play moves on the board (Chessground + chess.js legal-move dests,
   `templates/quiz/_chessboard_interactive.html`); each move is written as UCI into the
-  hidden `answer` field, so the POST contract of `quiz_question_view` is unchanged.
+  hidden `answer` field and automatically submitted with `fetch`, including after a
+  promotion choice. Board questions have no submit/reset controls; the POST contract of
+  `quiz_question_view` is unchanged. Intermediate replies return JSON and Chessground
+  updates the position in place without a page reload; completed attempts navigate to
+  the answer page.
 - Single-move grading uses `_answer_is_correct` (`quiz/views.py`): exact UCI match against
   `solution_uci`, falling back to option-text matching (SAN for imported puzzles).
   Mate-in-1 also accepts any legal move that delivers mate.

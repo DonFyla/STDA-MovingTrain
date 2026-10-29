@@ -907,7 +907,7 @@ class BoardGradingTests(TestCase):
         self.assertEqual(qtaker.current_score, 0)
         self.assertFalse(qtaker.questionresult_set.get().correct)
 
-    def test_interactive_question_renders_accessible_move_controls(self):
+    def test_interactive_question_validates_moves_automatically(self):
         qtaker = Qtaker.objects.create(name="B", email="board@example.com", user=self.user)
         qtaker.current_question_set = [self.question.id]
         qtaker.save()
@@ -915,7 +915,13 @@ class BoardGradingTests(TestCase):
         response = self.client.get(
             reverse("quiz:question", args=[qtaker.id, self.question.id])
         )
-        self.assertContains(response, 'id="board-submit" disabled')
+        self.assertContains(response, 'id="quiz-answer-form"')
+        self.assertContains(response, "answerForm.requestSubmit()")
+        self.assertContains(response, "fetch(window.location.href")
+        self.assertContains(response, "applyOpponentReply(data)")
+        self.assertContains(response, "Play your move on the board.")
+        self.assertNotContains(response, 'id="board-submit"')
+        self.assertNotContains(response, "Submit Answer")
         self.assertContains(response, 'role="status" aria-live="polite"')
         for piece in ("q", "r", "b", "n"):
             self.assertContains(response, f'data-promotion="{piece}"')
@@ -1248,6 +1254,38 @@ class MultiMovePuzzleTests(TestCase):
             QuestionResult.objects.filter(qtaker=self.qtaker, question=self.question).count(),
             1,
         )
+
+    def test_ajax_flow_returns_reply_then_answer_url_without_redirects(self):
+        response = self.client.post(
+            self.question_url,
+            {"answer": "e2e4"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "status": "continue",
+                "opponent_move": "e7e5",
+                "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                "progress": {"current": 2, "total": 2},
+            },
+        )
+
+        response = self.client.post(
+            self.question_url,
+            {"answer": "g1f3"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(), {"status": "complete", "answer_url": self.answer_url}
+        )
+        self.qtaker.refresh_from_db()
+        self.assertEqual(self.qtaker.last_text_answer, "e2e4 e7e5 g1f3")
+        self.assertEqual(self.qtaker.puzzle_state, {})
 
     def test_wrong_and_illegal_moves_do_not_score(self):
         for move in ("e2e3", "e2e5"):
