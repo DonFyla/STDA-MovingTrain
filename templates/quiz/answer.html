@@ -23,9 +23,32 @@
 
             {% include "quiz/_chessboard.html" with review_user_move=chosen_answer.text review_solution_move=solution_line_text %}
             {% if solution_line_text and chosen_answer.text %}
-                <div data-review-controls class="flex justify-center gap-3 mb-4" aria-label="Review board moves">
-                    <button type="button" data-review-move="user" aria-pressed="true" class="px-4 py-2 rounded-full border border-gray-300 bg-[#5E5044] text-white text-sm font-medium">Your move</button>
-                    <button type="button" data-review-move="solution" aria-pressed="false" class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Correct move</button>
+                <div data-review-controls class="mb-4" aria-label="Review board moves">
+                    <div class="flex justify-center gap-3 mb-4">
+                        <button type="button" data-review-move="user" aria-pressed="true" class="px-4 py-2 rounded-full border border-gray-300 bg-[#5E5044] text-white text-sm font-medium">Your attempt</button>
+                        <button type="button" data-review-move="solution" aria-pressed="false" class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Correct solution</button>
+                    </div>
+                    <div class="flex justify-center gap-3 mb-4">
+                        <button type="button" data-review-prev disabled class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium disabled:opacity-50">Previous</button>
+                        <span data-review-status role="status" aria-live="polite" class="text-sm text-gray-500">Initial position</span>
+                        <button type="button" data-review-next class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium disabled:opacity-50">Next</button>
+                    </div>
+                    <div class="flex justify-center gap-3 mb-4">
+                        <button type="button" data-analysis-start class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Analyze position</button>
+                        <button type="button" data-analysis-reset hidden class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Reset analysis</button>
+                        <button type="button" data-analysis-exit hidden class="px-4 py-2 rounded-full border border-gray-300 bg-white text-[#5E5044] text-sm font-medium">Exit analysis</button>
+                    </div>
+                    <dialog data-analysis-promotion-dialog aria-labelledby="analysis-promotion-title" class="rounded-2xl border border-gray-200 p-6 shadow-xl backdrop:bg-black/50">
+                        <h2 id="analysis-promotion-title" class="text-lg font-semibold text-gray-900 mb-2">Choose a promotion piece</h2>
+                        <p class="text-sm text-gray-500 mb-4">Select the piece your pawn should become.</p>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button type="button" data-analysis-promotion="q" class="px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium">Queen</button>
+                            <button type="button" data-analysis-promotion="r" class="px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium">Rook</button>
+                            <button type="button" data-analysis-promotion="b" class="px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium">Bishop</button>
+                            <button type="button" data-analysis-promotion="n" class="px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium">Knight</button>
+                        </div>
+                        <button type="button" data-analysis-promotion-cancel class="mt-4 w-full text-sm text-gray-500 underline">Cancel move</button>
+                    </dialog>
                 </div>
             {% endif %}
 

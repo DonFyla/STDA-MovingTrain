@@ -932,6 +932,18 @@ class BoardGradingTests(TestCase):
         self.assertContains(response, 'data-review-controls')
         self.assertContains(response, 'data-user-move="a1a8"')
         self.assertContains(response, 'data-solution-move="a1a8"')
+        self.assertContains(response, 'data-review-prev')
+        self.assertContains(response, 'data-review-next')
+        self.assertContains(response, 'data-review-status')
+        self.assertContains(response, 'data-analysis-start')
+        self.assertContains(response, 'data-analysis-reset')
+        self.assertContains(response, 'data-analysis-exit')
+        self.assertContains(response, 'buildReviewStates')
+        self.assertContains(response, 'startAnalysis')
+        self.assertContains(response, 'viewOnly: false')
+        self.assertContains(response, 'color: undefined')
+        for piece in ("q", "r", "b", "n"):
+            self.assertContains(response, f'data-analysis-promotion="{piece}"')
         self.assertContains(response, '<p class="text-green-700 mb-4">Ra8#</p>', html=True)
         self.assertContains(response, '<p class="text-green-700">a1a8</p>', html=True)
 

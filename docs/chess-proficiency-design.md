@@ -315,11 +315,13 @@ Do them in order; each phase leaves the site working.
   empty `solution_line` when their FEN is encountered again.
 - Multi-move state is server-driven: `Qtaker.puzzle_state` records only the current question
   and moves already played. After a correct intermediate move, the server applies the next
-  opponent reply and reloads the reconstructed position; future solution moves are never
+  opponent reply and returns the reconstructed position; future solution moves are never
   sent to the browser. The final move is graded against the exact complete recorded line.
-- Answer review applies complete UCI lines sequentially and displays both the student's and
-  solution lines in SAN. Coaches can author an odd-length solution line with sequential
-  legality validation.
+- Answer review displays both the student's and solution lines in SAN and provides
+  Previous/Next playback through every intermediate position. Analysis mode starts from
+  the currently reviewed position and allows legal moves for both sides, including
+  promotion, entirely in the browser with no submissions or scoring. Coaches can author
+  an odd-length solution line with sequential legality validation.
 - Alternative multi-move continuations remain deferred; only the recorded line is accepted.
 
 ---

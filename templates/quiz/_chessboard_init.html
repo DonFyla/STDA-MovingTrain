@@ -10,7 +10,10 @@
             fen: fen,
             // Board faces the side to move — the student plays from that side.
             orientation: fen.split(' ')[1] === 'b' ? 'black' : 'white',
-            viewOnly: true,
+            // Chessground only binds input events when initialized with viewOnly
+            // false. Keep review positions immovable until analysis mode starts.
+            viewOnly: false,
+            movable: { free: false, color: undefined },
             coordinates: true,
             highlight: { lastMove: true },
         });
@@ -19,41 +22,179 @@
         const controls = document.querySelector('[data-review-controls]');
         if (!controls) return;
 
-        function reviewPosition(uciLine) {
+        const prevButton = controls.querySelector('[data-review-prev]');
+        const nextButton = controls.querySelector('[data-review-next]');
+        const status = controls.querySelector('[data-review-status]');
+        const analysisStart = controls.querySelector('[data-analysis-start]');
+        const analysisReset = controls.querySelector('[data-analysis-reset]');
+        const analysisExit = controls.querySelector('[data-analysis-exit]');
+        const promotionDialog = controls.querySelector('[data-analysis-promotion-dialog]');
+        const promotionCancel = controls.querySelector('[data-analysis-promotion-cancel]');
+        let activeKind = 'user';
+        let stepIndex = 0;
+        let analysisMode = false;
+        let analysisGame = null;
+        let analysisStartFen = null;
+        let pendingPromotion = null;
+
+        function buildReviewStates(uciLine) {
             const game = new Chess(fen);
+            const states = [{ fen: fen, san: '', lastMove: [] }];
             const moves = (uciLine || '').trim().split(/\s+/).filter(Boolean);
-            if (!moves.length || moves.some(function (uci) {
-                return !/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(uci);
-            })) {
-                return { fen: fen, lastMove: [] };
-            }
-            try {
-                let lastMove = [];
-                moves.forEach(function (uci) {
+            for (const uci of moves) {
+                if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(uci)) break;
+                try {
                     const move = game.move({
                         from: uci.slice(0, 2),
                         to: uci.slice(2, 4),
                         promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
                     });
-                    lastMove = [move.from, move.to];
-                });
-                return { fen: game.fen(), lastMove: lastMove };
-            } catch (error) {
-                return { fen: fen, lastMove: [] };
+                    states.push({
+                        fen: game.fen(),
+                        san: move.san,
+                        lastMove: [move.from, move.to],
+                    });
+                } catch (error) {
+                    // An illegal submitted move cannot be displayed; retain every
+                    // valid position before it for step-through review.
+                    break;
+                }
             }
+            return states;
         }
 
-        function showReviewMove(kind) {
-            const uci = kind === 'user' ? el.dataset.userMove : el.dataset.solutionMove;
-            board.set(reviewPosition(uci));
+        const reviewStates = {
+            user: buildReviewStates(el.dataset.userMove),
+            solution: buildReviewStates(el.dataset.solutionMove),
+        };
+
+        function updateControls() {
+            const states = reviewStates[activeKind];
             controls.querySelectorAll('[data-review-move]').forEach(function (button) {
-                const selected = button.dataset.reviewMove === kind;
+                const selected = button.dataset.reviewMove === activeKind;
+                button.disabled = analysisMode;
                 button.setAttribute('aria-pressed', selected ? 'true' : 'false');
                 button.classList.toggle('bg-[#5E5044]', selected);
                 button.classList.toggle('text-white', selected);
                 button.classList.toggle('bg-white', !selected);
                 button.classList.toggle('text-[#5E5044]', !selected);
             });
+            prevButton.disabled = analysisMode || stepIndex === 0;
+            nextButton.disabled = analysisMode || stepIndex >= states.length - 1;
+            analysisStart.hidden = analysisMode;
+            analysisReset.hidden = !analysisMode;
+            analysisExit.hidden = !analysisMode;
+        }
+
+        function showReviewState() {
+            const state = reviewStates[activeKind][stepIndex];
+            board.set({
+                fen: state.fen,
+                viewOnly: true,
+                lastMove: state.lastMove,
+            });
+            status.textContent = stepIndex === 0
+                ? 'Initial position'
+                : 'Move ' + stepIndex + ' of ' + (reviewStates[activeKind].length - 1) + ': ' + state.san;
+            updateControls();
+        }
+
+        function showReviewMove(kind) {
+            if (analysisMode) return;
+            activeKind = kind;
+            stepIndex = 0;
+            showReviewState();
+        }
+
+        function legalDests() {
+            const dests = new Map();
+            analysisGame.moves({ verbose: true }).forEach(function (move) {
+                if (!dests.has(move.from)) dests.set(move.from, []);
+                dests.get(move.from).push(move.to);
+            });
+            return dests;
+        }
+
+        function syncAnalysisBoard(lastMove) {
+            const turnColor = analysisGame.turn() === 'w' ? 'white' : 'black';
+            board.set({
+                fen: analysisGame.fen(),
+                viewOnly: false,
+                turnColor: turnColor,
+                lastMove: lastMove || [],
+                movable: {
+                    free: false,
+                    color: 'both',
+                    dests: legalDests(),
+                    events: { after: onAnalysisMove },
+                },
+            });
+        }
+
+        function startAnalysis() {
+            if (analysisMode) return;
+            analysisMode = true;
+            analysisStartFen = reviewStates[activeKind][stepIndex].fen;
+            analysisGame = new Chess(analysisStartFen);
+            pendingPromotion = null;
+            status.textContent = 'Analysis mode — play legal moves for either side.';
+            syncAnalysisBoard();
+            updateControls();
+        }
+
+        function resetAnalysis() {
+            if (!analysisMode) return;
+            analysisGame = new Chess(analysisStartFen);
+            pendingPromotion = null;
+            if (promotionDialog.open) promotionDialog.close();
+            status.textContent = 'Analysis reset — play legal moves for either side.';
+            syncAnalysisBoard();
+        }
+
+        function exitAnalysis() {
+            if (!analysisMode) return;
+            analysisMode = false;
+            analysisGame = null;
+            analysisStartFen = null;
+            pendingPromotion = null;
+            if (promotionDialog.open) promotionDialog.close();
+            showReviewState();
+        }
+
+        function cancelAnalysisPromotion() {
+            pendingPromotion = null;
+            if (promotionDialog.open) promotionDialog.close();
+            syncAnalysisBoard();
+            status.textContent = 'Analysis mode — play legal moves for either side.';
+        }
+
+        function applyAnalysisMove(orig, dest, promotion) {
+            try {
+                const move = analysisGame.move({
+                    from: orig,
+                    to: dest,
+                    promotion: promotion,
+                });
+                pendingPromotion = null;
+                if (promotionDialog.open) promotionDialog.close();
+                syncAnalysisBoard([move.from, move.to]);
+                status.textContent = 'Analysis: ' + move.san + '. Play legal moves for either side.';
+            } catch (error) {
+                cancelAnalysisPromotion();
+            }
+        }
+
+        function onAnalysisMove(orig, dest) {
+            if (!analysisMode || !analysisGame) return;
+            const promotions = analysisGame.moves({ verbose: true }).filter(function (move) {
+                return move.from === orig && move.to === dest && move.promotion;
+            });
+            if (promotions.length) {
+                pendingPromotion = { orig: orig, dest: dest };
+                promotionDialog.showModal();
+                return;
+            }
+            applyAnalysisMove(orig, dest);
         }
 
         controls.querySelectorAll('[data-review-move]').forEach(function (button) {
@@ -61,6 +202,34 @@
                 showReviewMove(button.dataset.reviewMove);
             });
         });
+        prevButton.addEventListener('click', function () {
+            if (!analysisMode && stepIndex > 0) {
+                stepIndex -= 1;
+                showReviewState();
+            }
+        });
+        nextButton.addEventListener('click', function () {
+            if (!analysisMode && stepIndex < reviewStates[activeKind].length - 1) {
+                stepIndex += 1;
+                showReviewState();
+            }
+        });
+        analysisStart.addEventListener('click', startAnalysis);
+        analysisReset.addEventListener('click', resetAnalysis);
+        analysisExit.addEventListener('click', exitAnalysis);
+        controls.querySelectorAll('[data-analysis-promotion]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                if (!pendingPromotion) return;
+                const selection = pendingPromotion;
+                applyAnalysisMove(selection.orig, selection.dest, button.dataset.analysisPromotion);
+            });
+        });
+        promotionCancel.addEventListener('click', cancelAnalysisPromotion);
+        promotionDialog.addEventListener('cancel', function (event) {
+            event.preventDefault();
+            cancelAnalysisPromotion();
+        });
+
         showReviewMove('user');
     });
 </script>
