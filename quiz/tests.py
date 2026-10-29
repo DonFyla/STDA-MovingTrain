@@ -992,6 +992,9 @@ class BoardGradingTests(TestCase):
             self.assertContains(response, f'data-analysis-promotion="{piece}"')
         self.assertContains(response, '<p class="text-green-700 mb-4">Ra8#</p>', html=True)
         self.assertContains(response, '<p class="text-green-700">a1a8</p>', html=True)
+        content = response.content.decode()
+        self.assertLess(content.index('class="quiz-board"'), content.index("View Results"))
+        self.assertLess(content.index("View Results"), content.index("Your answer:"))
 
 
 class MotifProgressionTests(TestCase):

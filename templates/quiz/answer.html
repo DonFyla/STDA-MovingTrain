@@ -3,12 +3,11 @@
 {% block title %}Answer - Chess Quiz{% endblock %}
 
 {% block content %}
-<section class="container mx-auto px-6 py-16">
+<section class="container mx-auto px-6 py-8">
     <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
         {% if is_correct %}
-            <div class="mb-6">
-                <div class="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center text-green-600 text-2xl font-bold">✓</div>
-                <h2 class="text-2xl font-semibold mt-4 text-green-700">Correct!</h2>
+            <div class="mb-4">
+                <div class="w-8 h-8 mx-auto bg-green-100 rounded-full flex items-center justify-center text-green-600 text-xl font-bold">✓</div>
             </div>
         {% else %}
             <div class="mb-6">
@@ -22,6 +21,17 @@
             <div class="mb-4">{{ question.question|safe }}</div>
 
             {% include "quiz/_chessboard.html" with review_user_move=chosen_answer.text review_solution_move=solution_line_text %}
+            <div class="text-center mb-6">
+                {% if next_question_id %}
+                    <a href="{% url 'quiz:question' qtaker.id next_question_id %}" class="inline-block px-6 py-3 bg-[#5E5044] text-white rounded-full hover:bg-[#4a3f35] transition-colors font-medium">
+                        Next Question
+                    </a>
+                {% else %}
+                    <a href="{% url 'quiz:result' qtaker.id %}" class="inline-block px-6 py-3 bg-[#5E5044] text-white rounded-full hover:bg-[#4a3f35] transition-colors font-medium">
+                        View Results
+                    </a>
+                {% endif %}
+            </div>
             {% if solution_line_text and chosen_answer.text %}
                 <div data-review-controls class="mb-4" aria-label="Review board moves">
                     <div class="flex justify-center gap-3 mb-4">
@@ -60,16 +70,6 @@
         </div>
 
         <p class="text-gray-600 mb-6">Current score: <span class="font-semibold">{{ score }}</span></p>
-
-        {% if next_question_id %}
-            <a href="{% url 'quiz:question' qtaker.id next_question_id %}" class="inline-block px-6 py-3 bg-[#5E5044] text-white rounded-full hover:bg-[#4a3f35] transition-colors font-medium">
-                Next Question
-            </a>
-        {% else %}
-            <a href="{% url 'quiz:result' qtaker.id %}" class="inline-block px-6 py-3 bg-[#5E5044] text-white rounded-full hover:bg-[#4a3f35] transition-colors font-medium">
-                View Results
-            </a>
-        {% endif %}
     </div>
 </section>
 {% endblock %}
