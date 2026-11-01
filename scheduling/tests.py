@@ -3,10 +3,11 @@ from datetime import date, time, timedelta, timezone as dt_timezone
 from unittest.mock import patch
 from django.core import mail
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.html import escapejs
 from .models import Coach, AvailabilitySlot, CoachBlockedDate, Booking, FlexibleBooking, SessionReminder, SpecialBooking
 
 User = get_user_model()
@@ -916,6 +917,13 @@ class BookingPaymentTests(TestCase):
         self.assertEqual(self.booking.status, "confirmed")
         self.assertEqual(self.booking.payment_status, "paid")
         self.assertIsNotNone(self.booking.payment_date)
+        coach_message = next(message for message in mail.outbox if message.to == [self.coach.email])
+        coach_html = coach_message.alternatives[0][0]
+        self.assertIn("Booking Confirmed", coach_message.subject)
+        self.assertIn("Schedule:", coach_html)
+        self.assertNotIn("Amount Paid:", coach_html)
+        self.assertNotIn("Reference:", coach_html)
+        self.assertNotIn(self.booking.payment_reference, coach_html)
 
     @patch("payments.views.verify_transaction")
     def test_booking_callback_shows_error_on_failure(self, mock_verify):
@@ -933,6 +941,124 @@ class BookingPaymentTests(TestCase):
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, "pending")
         self.assertEqual(self.booking.payment_status, "pending")
+
+
+@override_settings(
+    GOOGLE_ADS_CONVERSION_ID="AW-123456789",
+    GOOGLE_ADS_CONVERSION_LABEL="purchase_label",
+)
+class GoogleAdsConversionTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(
+            email="ads-student@example.com",
+            username="adsstudent",
+            password="testpass123",
+        )
+        self.coach_user = User.objects.create_user(
+            email="ads-coach@example.com",
+            username="adscoach",
+            password="testpass123",
+            is_coach=True,
+            is_student=False,
+        )
+        self.coach = Coach.objects.create(
+            user=self.coach_user,
+            name="Ads Coach",
+            email="ads-coach@example.com",
+        )
+        self.booking = Booking.objects.create(
+            coach=self.coach,
+            student_name="Ads Student",
+            student_email=self.student.email,
+            booking_date=date(2030, 12, 25),
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            recurring_days=[1],
+            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            sessions_per_month=4,
+            monthly_amount=40000,
+            payment_amount=39500,
+            payment_reference="BK-ADS-123",
+            payment_status="paid",
+            status="confirmed",
+        )
+        self.special_booking = SpecialBooking.objects.create(
+            coach=self.coach,
+            student=self.student,
+            student_name="Ads Student",
+            student_email=self.student.email,
+            total_sessions=1,
+            hourly_rate=15000,
+            total_amount=15000,
+            payment_reference="SP-ADS-123",
+            payment_status="paid",
+            status="confirmed",
+        )
+        self.booking_url = reverse("scheduling:booking_confirmation", args=[self.booking.id])
+        self.special_url = reverse("scheduling:special_booking_confirmation", args=[self.special_booking.id])
+
+    def test_paid_recurring_booking_emits_purchase_conversion(self):
+        self.client.force_login(self.student)
+        response = self.client.get(self.booking_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"'send_to': '{escapejs('AW-123456789')}/purchase_label'")
+        self.assertContains(response, "'value': 39500.00")
+        self.assertContains(response, "'currency': 'NGN'")
+        self.assertContains(response, f"'transaction_id': '{escapejs('BK-ADS-123')}'")
+
+    def test_paid_special_booking_emits_purchase_conversion(self):
+        self.client.force_login(self.student)
+        response = self.client.get(self.special_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"'send_to': '{escapejs('AW-123456789')}/purchase_label'")
+        self.assertContains(response, "'value': 15000.00")
+        self.assertContains(response, "'currency': 'NGN'")
+        self.assertContains(response, f"'transaction_id': '{escapejs('SP-ADS-123')}'")
+
+    def test_pending_bookings_do_not_emit_conversion(self):
+        self.booking.payment_status = "pending"
+        self.booking.save(update_fields=["payment_status"])
+        self.special_booking.payment_status = "pending"
+        self.special_booking.save(update_fields=["payment_status"])
+        self.client.force_login(self.student)
+        for url in (self.booking_url, self.special_url):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "gtag('event', 'conversion'")
+
+    def test_coach_and_staff_views_do_not_emit_conversion(self):
+        staff = User.objects.create_user(
+            email="ads-staff@example.com",
+            username="adsstaff",
+            password="testpass123",
+            is_staff=True,
+            is_superuser=True,
+        )
+        for user in (self.coach_user, staff):
+            self.client.force_login(user)
+            for url in (self.booking_url, self.special_url):
+                with self.subTest(user=user.email, url=url):
+                    response = self.client.get(url)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertNotContains(response, "gtag('event', 'conversion'")
+
+    def test_missing_ads_configuration_suppresses_conversion(self):
+        self.client.force_login(self.student)
+        for setting in ("GOOGLE_ADS_CONVERSION_ID", "GOOGLE_ADS_CONVERSION_LABEL"):
+            with self.subTest(setting=setting), override_settings(**{setting: ""}):
+                response = self.client.get(self.booking_url)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "gtag('event', 'conversion'")
+
+    def test_recurring_conversion_uses_fallback_amount_and_transaction_id(self):
+        self.booking.payment_amount = None
+        self.booking.payment_reference = ""
+        self.booking.save(update_fields=["payment_amount", "payment_reference"])
+        self.client.force_login(self.student)
+        response = self.client.get(self.booking_url)
+        self.assertContains(response, "'value': 40000.00")
+        self.assertContains(response, f"'transaction_id': '{escapejs(str(self.booking.id))}'")
 
 
 class SubscriptionCancellationTests(TestCase):
@@ -1674,7 +1800,13 @@ class SessionReminderTests(TestCase):
         self.student = User.objects.create_user(
             username="rstudent", password="testpass", email="rstudent@x.com"
         )
-        self.local_now = timezone.localtime()
+        self.local_now = timezone.make_aware(timezone.datetime(2026, 1, 5, 9, 0))
+        now_patcher = patch(
+            "scheduling.management.commands.send_session_reminders.timezone.localtime",
+            return_value=self.local_now,
+        )
+        now_patcher.start()
+        self.addCleanup(now_patcher.stop)
 
     def _flexible(self, start_time, status="confirmed"):
         return FlexibleBooking.objects.create(
@@ -1722,32 +1854,72 @@ class SessionReminderTests(TestCase):
         self.assertEqual(len(mail.outbox), 0)
 
     def test_recurring_booking_reminded(self):
+        start_time = self._in_one_hour()
+        end_time = time((start_time.hour + 1) % 24, start_time.minute)
         Booking.objects.create(
             coach=self.coach,
             student_name=self.student.full_name or self.student.username,
             student_email=self.student.email,
             booking_date=self.local_now.date(),
-            start_time=self._in_one_hour(),
-            end_time=time(12, 0),
+            start_time=start_time,
+            end_time=end_time,
             status="confirmed",
             payment_status="paid",
-            recurring_dates=[self.local_now.date().isoformat()],
+            recurring_dates=[{
+                "date": self.local_now.date().isoformat(),
+                "start_time": start_time.strftime("%H:%M"),
+                "end_time": end_time.strftime("%H:%M"),
+            }],
+        )
+        call_command("send_session_reminders")
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = {message.to[0] for message in mail.outbox}
+        self.assertEqual(recipients, {self.student.email, self.coach.email})
+        self.assertTrue(SessionReminder.objects.filter(kind="recurring").exists())
+
+    def test_recurring_second_weekly_slot_uses_its_own_time(self):
+        second_start = self._in_one_hour()
+        second_end = time((second_start.hour + 1) % 24, second_start.minute)
+        first_start = time((second_start.hour - 2) % 24, second_start.minute)
+        first_end = time((first_start.hour + 1) % 24, first_start.minute)
+        Booking.objects.create(
+            coach=self.coach,
+            student_name=self.student.full_name or self.student.username,
+            student_email=self.student.email,
+            booking_date=self.local_now.date(),
+            start_time=first_start,
+            end_time=first_end,
+            start_time2=second_start,
+            end_time2=second_end,
+            status="confirmed",
+            payment_status="paid",
+            recurring_dates=[{
+                "date": self.local_now.date().isoformat(),
+                "start_time": second_start.strftime("%H:%M"),
+                "end_time": second_end.strftime("%H:%M"),
+            }],
         )
         call_command("send_session_reminders")
         self.assertEqual(len(mail.outbox), 2)
         self.assertTrue(SessionReminder.objects.filter(kind="recurring").exists())
 
     def test_recurring_unpaid_not_reminded(self):
+        start_time = self._in_one_hour()
+        end_time = time((start_time.hour + 1) % 24, start_time.minute)
         Booking.objects.create(
             coach=self.coach,
             student_name=self.student.username,
             student_email=self.student.email,
             booking_date=self.local_now.date(),
-            start_time=self._in_one_hour(),
-            end_time=time(12, 0),
+            start_time=start_time,
+            end_time=end_time,
             status="confirmed",
             payment_status="pending",
-            recurring_dates=[self.local_now.date().isoformat()],
+            recurring_dates=[{
+                "date": self.local_now.date().isoformat(),
+                "start_time": start_time.strftime("%H:%M"),
+                "end_time": end_time.strftime("%H:%M"),
+            }],
         )
         call_command("send_session_reminders")
         self.assertEqual(len(mail.outbox), 0)

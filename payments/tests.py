@@ -861,7 +861,17 @@ class SubscriptionSyncTests(TestCase):
             self.booking.next_billing_date, charged_at + timedelta(days=30)
         )
         self.assertEqual(result["backfilled"], 1)
-        self.assertEqual(len(mail.outbox), 1)  # the receipt they never got
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = {message.to[0] for message in mail.outbox}
+        self.assertEqual(recipients, {"syncstudent@example.com", "synccoach@example.com"})
+        coach_message = next(message for message in mail.outbox if message.to == [self.coach.email])
+        coach_html = coach_message.alternatives[0][0]
+        self.assertEqual(coach_message.subject, "Recurring Classes Continue - Sync Student")
+        self.assertIn("recurring classes will continue as scheduled", coach_html)
+        self.assertIn("Recurring Schedule", coach_html)
+        self.assertNotIn("₦", coach_html)
+        self.assertNotIn("Next billing date", coach_html)
+        self.assertNotIn(self.booking.payment_reference, coach_html)
 
     def test_first_payment_tx_is_not_treated_as_renewal(self):
         # The first payment's tx timestamp precedes the recorded payment_date
@@ -929,7 +939,7 @@ class SubscriptionSyncTests(TestCase):
             self.booking.next_billing_date, renewal_charge + timedelta(days=30)
         )
         self.assertEqual(result["backfilled"], 1)
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(mail.outbox), 2)
 
     def test_unchanged_state_is_noop(self):
         next_payment = timezone.now() + timedelta(days=20)

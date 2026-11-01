@@ -742,7 +742,14 @@ def booking_confirmation_view(request, booking_id):
         or (booking.coach.user == request.user)
     ):
         raise PermissionDenied
-    return render(request, "scheduling/booking_confirmation.html", {"booking": booking})
+    context = {"booking": booking}
+    if booking.payment_status == "paid" and booking.student_email == request.user.email:
+        context["google_ads_conversion"] = {
+            "value": booking.payment_amount or booking.monthly_amount,
+            "currency": "NGN",
+            "transaction_id": booking.payment_reference or str(booking.id),
+        }
+    return render(request, "scheduling/booking_confirmation.html", context)
 
 
 @login_required
@@ -768,7 +775,15 @@ def special_booking_confirmation_view(request, booking_id):
         or (booking.coach.user == request.user)
     ):
         raise PermissionDenied
-    return render(request, "scheduling/special_booking_confirmation.html", {"booking": booking})
+    context = {"booking": booking}
+    is_student = booking.student == request.user or booking.student_email == request.user.email
+    if booking.payment_status == "paid" and is_student:
+        context["google_ads_conversion"] = {
+            "value": booking.payment_amount or booking.total_amount,
+            "currency": "NGN",
+            "transaction_id": booking.payment_reference or str(booking.id),
+        }
+    return render(request, "scheduling/special_booking_confirmation.html", context)
 
 
 def _coached_students(q=""):

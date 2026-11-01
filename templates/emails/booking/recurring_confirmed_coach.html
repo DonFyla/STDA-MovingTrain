@@ -19,8 +19,6 @@
         {% endif %}
     </p>
     <p><strong>Sessions per Month:</strong> {{ booking.sessions_per_month }}</p>
-    <p><strong>Amount Paid:</strong> ₦{{ booking.monthly_amount|floatformat:0|intcomma }}</p>
-    <p><strong>Reference:</strong> {{ booking.payment_reference|default:booking.id }}</p>
 </div>
 
 <div style="background: #E8F5E9; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #4CAF50;">

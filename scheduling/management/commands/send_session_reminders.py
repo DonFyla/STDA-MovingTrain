@@ -85,12 +85,23 @@ class Command(BaseCommand):
             payment_status="paid",
         ).select_related("coach")
         for booking in bookings:
-            for raw_date in booking.recurring_dates or []:
-                try:
-                    session_date = datetime.date.fromisoformat(str(raw_date)[:10])
-                except ValueError:
-                    continue
-                if self._start_in_window(session_date, booking.start_time, lower, upper) is None:
+            for session in booking.recurring_dates or []:
+                if isinstance(session, dict):
+                    try:
+                        session_date = datetime.date.fromisoformat(str(session.get("date", ""))[:10])
+                        start_time = datetime.datetime.strptime(session["start_time"], "%H:%M").time()
+                        end_time = datetime.datetime.strptime(session["end_time"], "%H:%M").time()
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                else:
+                    # Legacy recurring bookings stored only ISO date strings.
+                    try:
+                        session_date = datetime.date.fromisoformat(str(session)[:10])
+                    except ValueError:
+                        continue
+                    start_time = booking.start_time
+                    end_time = booking.end_time
+                if self._start_in_window(session_date, start_time, lower, upper) is None:
                     continue
                 if not self._mark_reminded("recurring", booking.id, session_date):
                     continue
@@ -99,8 +110,8 @@ class Command(BaseCommand):
                     student_email=booking.student_email,
                     coach=booking.coach,
                     session_date=session_date,
-                    start_time=booking.start_time,
-                    end_time=booking.end_time,
+                    start_time=start_time,
+                    end_time=end_time,
                     meeting_link=booking.coach.meeting_link or "",
                 )
                 count += 1
