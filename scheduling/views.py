@@ -253,10 +253,45 @@ def coach_dashboard_view(request):
 
     blocked_dates = coach.blocked_dates.filter(blocked_date__gte=today).order_by("blocked_date")
     pending_bookings = coach.bookings.filter(status="pending").order_by("-created_at")
-    upcoming_bookings = (
-        coach.bookings.filter(status="confirmed", booking_date__gte=today)
-        .order_by("booking_date", "start_time")
+    upcoming_bookings = []
+    recurring_bookings = coach.bookings.filter(
+        status__in=["confirmed", "cancelled"],
+        payment_status="paid",
     )
+    for booking in recurring_bookings:
+        upcoming_sessions = []
+        for session in booking.recurring_dates or []:
+            if isinstance(session, dict):
+                try:
+                    session_date = date.fromisoformat(str(session.get("date", ""))[:10])
+                    raw_start = session.get("start_time")
+                    raw_end = session.get("end_time")
+                    start_time = datetime.strptime(raw_start, "%H:%M").time() if raw_start else booking.start_time
+                    end_time = datetime.strptime(raw_end, "%H:%M").time() if raw_end else booking.end_time
+                except (TypeError, ValueError):
+                    continue
+            else:
+                # Legacy recurring bookings stored only ISO date strings.
+                try:
+                    session_date = date.fromisoformat(str(session)[:10])
+                except ValueError:
+                    continue
+                start_time = booking.start_time
+                end_time = booking.end_time
+            if session_date >= today:
+                upcoming_sessions.append({
+                    "date": session_date,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                })
+        if upcoming_sessions:
+            upcoming_sessions.sort(key=lambda session: (session["date"], session["start_time"]))
+            booking.upcoming_sessions = upcoming_sessions
+            booking.next_session = upcoming_sessions[0]
+            upcoming_bookings.append(booking)
+    upcoming_bookings.sort(key=lambda booking: (
+        booking.next_session["date"], booking.next_session["start_time"]
+    ))
     flexible_bookings = coach.flexible_bookings.exclude(status="cancelled").order_by("-session_date", "-start_time")
 
     context = {

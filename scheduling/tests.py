@@ -280,6 +280,93 @@ class CoachDashboardTests(TestCase):
         self.assertContains(response, "Focus on openings")
         self.assertContains(response, "2 points")
 
+    def _recurring_dashboard_booking(self, **overrides):
+        today = timezone.now().date()
+        data = {
+            "coach": self.coach,
+            "student_name": "Recurring Student",
+            "student_email": self.student_user.email,
+            "booking_date": today - timedelta(days=30),
+            "start_time": time(9, 0),
+            "end_time": time(10, 0),
+            "recurring_days": [1],
+            "recurring_dates": [{
+                "date": (today + timedelta(days=7)).isoformat(),
+                "start_time": "09:00",
+                "end_time": "10:00",
+            }],
+            "sessions_per_month": 4,
+            "monthly_amount": 40000,
+            "status": "confirmed",
+            "payment_status": "paid",
+        }
+        data.update(overrides)
+        return Booking.objects.create(**data)
+
+    def test_coach_dashboard_shows_renewed_sessions_after_original_date(self):
+        today = timezone.now().date()
+        first_future = today + timedelta(days=7)
+        second_future = today + timedelta(days=14)
+        booking = self._recurring_dashboard_booking(
+            recurring_dates=[
+                {"date": second_future.isoformat(), "start_time": "09:00", "end_time": "10:00"},
+                {"date": (today - timedelta(days=1)).isoformat(), "start_time": "09:00", "end_time": "10:00"},
+                {"date": first_future.isoformat(), "start_time": "09:00", "end_time": "10:00"},
+            ]
+        )
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("scheduling:coach_dashboard"))
+        upcoming = response.context["upcoming_bookings"]
+        self.assertEqual(upcoming, [booking])
+        dashboard_booking = upcoming[0]
+        self.assertEqual(
+            [session["date"] for session in dashboard_booking.upcoming_sessions],
+            [first_future, second_future],
+        )
+        self.assertEqual(dashboard_booking.next_session["date"], first_future)
+        self.assertContains(response, "Upcoming Session Dates")
+
+    def test_coach_dashboard_uses_second_weekly_session_time(self):
+        booking = self._recurring_dashboard_booking(
+            start_time2=time(14, 0),
+            end_time2=time(15, 0),
+            recurring_dates=[{
+                "date": (timezone.now().date() + timedelta(days=7)).isoformat(),
+                "start_time": "14:00",
+                "end_time": "15:00",
+            }],
+        )
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("scheduling:coach_dashboard"))
+        upcoming = response.context["upcoming_bookings"]
+        self.assertEqual(upcoming, [booking])
+        self.assertEqual(upcoming[0].next_session["start_time"], time(14, 0))
+        self.assertEqual(upcoming[0].next_session["end_time"], time(15, 0))
+        self.assertContains(response, "2:00 PM")
+
+    def test_coach_dashboard_shows_remaining_paid_sessions_after_cancellation(self):
+        booking = self._recurring_dashboard_booking(
+            status="cancelled",
+            subscription_status="cancelled",
+        )
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("scheduling:coach_dashboard"))
+        self.assertEqual(response.context["upcoming_bookings"], [booking])
+
+    def test_coach_dashboard_excludes_unpaid_and_past_only_sessions(self):
+        today = timezone.now().date()
+        self._recurring_dashboard_booking(
+            recurring_dates=[{
+                "date": (today - timedelta(days=1)).isoformat(),
+                "start_time": "09:00",
+                "end_time": "10:00",
+            }],
+        )
+        self._recurring_dashboard_booking(payment_status="pending")
+        self.client.force_login(self.coach_user)
+        response = self.client.get(reverse("scheduling:coach_dashboard"))
+        self.assertEqual(response.context["upcoming_bookings"], [])
+
 
 class EffectiveAvailabilityTests(TestCase):
     def setUp(self):
