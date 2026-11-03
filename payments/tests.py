@@ -2,10 +2,11 @@ import json
 from datetime import date, time, timedelta
 from unittest.mock import patch
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.html import escapejs
 from scheduling.models import Booking
 from .models import UserPoints, PointTransaction
 from .points_service import add_points, use_points, get_balance
@@ -107,6 +108,52 @@ class FlutterwaveCallbackTests(TestCase):
         self.assertEqual(PointTransaction.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Your Points Purchase is Confirmed")
+
+    @override_settings(
+        GOOGLE_ADS_CONVERSION_ID="AW-123456789",
+        GOOGLE_ADS_CONVERSION_LABEL="purchase_label",
+    )
+    @patch("payments.views.verify_transaction")
+    def test_callback_tracks_points_purchase_once_on_dashboard(self, mock_verify):
+        mock_verify.return_value = {
+            "success": True,
+            "status": "successful",
+            "reference": "FLT-CALLBACK-123",
+            "amount": 38000,
+        }
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("payments:flutterwave_callback"),
+            {"reference": "FLT-CALLBACK-123"},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/dashboard_student.html")
+        self.assertContains(response, f"'send_to': '{escapejs('AW-123456789')}/purchase_label'")
+        self.assertContains(response, "'value': 38000.00")
+        self.assertContains(response, "'currency': 'NGN'")
+        self.assertContains(response, f"'transaction_id': '{escapejs('FLT-CALLBACK-123')}'")
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "gtag('event', 'conversion'")
+
+    @override_settings(GOOGLE_ADS_CONVERSION_ID="", GOOGLE_ADS_CONVERSION_LABEL="")
+    @patch("payments.views.verify_transaction")
+    def test_points_purchase_does_not_track_without_ads_configuration(self, mock_verify):
+        mock_verify.return_value = {
+            "success": True,
+            "status": "successful",
+            "reference": "FLT-CALLBACK-123",
+            "amount": 38000,
+        }
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("payments:flutterwave_callback"),
+            {"reference": "FLT-CALLBACK-123"},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "gtag('event', 'conversion'")
 
     @patch("payments.views.verify_transaction")
     def test_callback_shows_error_on_failure(self, mock_verify):

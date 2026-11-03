@@ -170,6 +170,15 @@ def flutterwave_callback_view(request):
             from payments.points_service import complete_pending_transaction
             complete_pending_transaction(tx)
             send_points_purchased(request.user, tx)
+        payment_amount = result.get("amount")
+        if payment_amount is None:
+            package = next((p for p in POINT_PACKAGES if p["points"] == tx.amount), None)
+            payment_amount = package["price"] if package else tx.amount * PRICE_PER_POINT
+        request.session["points_purchase_conversion"] = {
+            "value": str(payment_amount),
+            "currency": "NGN",
+            "transaction_id": tx.payment_reference or str(tx.id),
+        }
         messages.success(
             request,
             f"Payment successful! {tx.amount} points have been added to your balance.",

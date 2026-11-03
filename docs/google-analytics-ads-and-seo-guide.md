@@ -44,6 +44,7 @@ The project already contains the required integration points:
   - `payment_status` is `paid`;
   - the logged-in viewer is the student; and
   - both Ads conversion settings are present.
+- Successful points purchases send the same conversion when the student reaches the dashboard after payment. The verified amount is carried through the server-side session and the event is consumed once.
 - The purchase event contains the amount, `NGN`, and a stable transaction reference. Pending payments and coach/staff page views do not fire it.
 
 The current purchase event is for **Google Ads**. Configuring GA4 will provide general visitor analytics, but it will not automatically create a separate GA4 ecommerce `purchase` event. That can be added later if GA4 monetization reports are required.

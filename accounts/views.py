@@ -254,6 +254,9 @@ def dashboard_view(request):
         "earned_badges": earned_badges,
         "locked_badges": locked_badges,
     }
+    points_purchase = request.session.pop("points_purchase_conversion", None)
+    if points_purchase:
+        context["google_ads_conversion"] = points_purchase
     return render(request, "accounts/dashboard_student.html", context)
 
 
