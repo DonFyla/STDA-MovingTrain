@@ -310,7 +310,7 @@ def cancel_payment_plan(plan_id):
     url = f"{FLUTTERWAVE_BASE_URL}/payment-plans/{plan_id}/cancel"
 
     try:
-        response = requests.post(url, headers=_get_headers(), timeout=30)
+        response = requests.put(url, headers=_get_headers(), timeout=30)
         response.raise_for_status()
         data = _parse_response(response)
 
@@ -340,7 +340,7 @@ def cancel_subscription(subscription_id):
     url = f"{FLUTTERWAVE_BASE_URL}/subscriptions/{subscription_id}/cancel"
 
     try:
-        response = requests.post(url, headers=_get_headers(), timeout=30)
+        response = requests.put(url, headers=_get_headers(), timeout=30)
         response.raise_for_status()
         data = _parse_response(response)
 

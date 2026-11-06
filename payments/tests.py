@@ -800,6 +800,45 @@ class FlutterwaveServiceTests(TestCase):
         self.assertEqual(result["status"], "successful")
 
 
+    @patch("payments.flutterwave_service.requests.put")
+    @patch("payments.flutterwave_service.settings.FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST-123")
+    def test_cancel_subscription_uses_put(self, mock_put):
+        mock_put.return_value.json.return_value = {
+            "status": "success",
+            "message": "Subscription cancelled",
+        }
+        mock_put.return_value.raise_for_status = lambda: None
+
+        from payments.flutterwave_service import cancel_subscription
+        result = cancel_subscription("sub_123")
+
+        self.assertTrue(result["success"])
+        mock_put.assert_called_once()
+        self.assertEqual(
+            mock_put.call_args.args[0],
+            "https://api.flutterwave.com/v3/subscriptions/sub_123/cancel",
+        )
+
+    @patch("payments.flutterwave_service.requests.put")
+    @patch("payments.flutterwave_service.settings.FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST-123")
+    def test_cancel_payment_plan_uses_put(self, mock_put):
+        mock_put.return_value.json.return_value = {
+            "status": "success",
+            "message": "Payment plan cancelled",
+        }
+        mock_put.return_value.raise_for_status = lambda: None
+
+        from payments.flutterwave_service import cancel_payment_plan
+        result = cancel_payment_plan("3807")
+
+        self.assertTrue(result["success"])
+        mock_put.assert_called_once()
+        self.assertEqual(
+            mock_put.call_args.args[0],
+            "https://api.flutterwave.com/v3/payment-plans/3807/cancel",
+        )
+
+
 class SubscriptionSyncTests(TestCase):
     """Daily reconciliation with Flutterwave's API: subscription status sync
     and backfill of renewals the webhook missed."""
