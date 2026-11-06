@@ -49,8 +49,9 @@ def is_slot_available(coach, session_date, start_time, end_time, exclude_flexibl
 
     # 3. Must not overlap recurring bookings.
     booking_q = Booking.objects.filter(
+        Q(status__in=["pending", "confirmed"])
+        | Q(status="cancelled", subscription_status="cancelled", payment_status="paid"),
         coach=coach,
-        status__in=["pending", "confirmed"],
     ).exclude(id=exclude_booking_id)
     for bk in booking_q:
         for slot in bk.recurring_dates or []:

@@ -85,10 +85,12 @@ def sync_subscriptions(now=None):
             continue
         sub = matches[0]
 
-        if sub.get("status") != "active" and booking.status != "cancelled":
+        if sub.get("status") != "active":
+            from scheduling.recurring import align_booking_schedule
+
             booking.subscription_status = "cancelled"
-            booking.status = "cancelled"
-            booking.save(update_fields=["subscription_status", "status"])
+            booking.save(update_fields=["subscription_status"])
+            align_booking_schedule(booking)
             status_synced += 1
             logger.warning(
                 "Booking %s marked cancelled: Flutterwave subscription %s is %s.",

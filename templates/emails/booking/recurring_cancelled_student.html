@@ -2,12 +2,17 @@
 {% load humanize scheduling_extras %}
 
 {% block content %}
-<h2 style="color: #5E5044; margin-top: 0;">Booking Cancelled</h2>
+<h2 style="color: #5E5044; margin-top: 0;">{% if subscription_only %}Subscription Cancelled{% else %}Booking Cancelled{% endif %}</h2>
 <p>Hello {{ booking.student_name }},</p>
+{% if subscription_only %}
+<p>Your monthly subscription with <strong>{{ coach.name }}</strong> has been cancelled. No further subscription payments will be taken.</p>
+<p><strong>Your current booked classes will still hold as scheduled.</strong></p>
+{% else %}
 <p>We’re sorry, but your monthly booking with <strong>{{ coach.name }}</strong> has been cancelled. If you were not expecting this, please contact us.</p>
+{% endif %}
 
 <div style="background: #F5EFE7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-    <h3 style="margin-top: 0; color: #5E5044;">Cancelled Booking Details</h3>
+    <h3 style="margin-top: 0; color: #5E5044;">{% if subscription_only %}Current Booking Details{% else %}Cancelled Booking Details{% endif %}</h3>
     <p><strong>Coach:</strong> {{ coach.name }}</p>
     <p><strong>Schedule:</strong>
         {% for day in booking.recurring_days %}{{ day|day_name }}{% if not forloop.last %} & {% endif %}{% endfor %}

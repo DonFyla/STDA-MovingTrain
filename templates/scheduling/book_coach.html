@@ -415,6 +415,7 @@
 <script>
     const slotsByDay = JSON.parse('{{ slots_by_day_json|escapejs }}');
     const bookedSlotsRecurring = JSON.parse('{{ booked_slots_recurring_json|escapejs }}');
+    const bookedSlotsRecurringDates = JSON.parse('{{ booked_slots_recurring_dates_json|escapejs }}');
     const bookedSlotsFlexible = JSON.parse('{{ booked_slots_flexible_json|escapejs }}');
     const bookedSlotsSpecial = JSON.parse('{{ booked_slots_special_json|escapejs }}');
     const blockedDates = JSON.parse('{{ blocked_dates_json|escapejs }}');
@@ -459,6 +460,11 @@
 
     function isSlotBookedSpecial(dateStr, startTime, endTime) {
         const booked = bookedSlotsSpecial[dateStr] || [];
+        return booked.some(b => b.start < endTime && b.end > startTime);
+    }
+
+    function isSlotBookedRecurringOnDate(dateStr, startTime, endTime) {
+        const booked = bookedSlotsRecurringDates[dateStr] || [];
         return booked.some(b => b.start < endTime && b.end > startTime);
     }
 
@@ -526,7 +532,7 @@
                 const availableSlots = slots.filter(slot => {
                     const start = slot.start_time;
                     const end = slot.end_time;
-                    return !isSlotBookedFlexible(dateStr, start, end) && !isSlotBookedSpecial(dateStr, start, end) && !isSlotBlocked(dateStr, start, end) && !isSlotBookedRecurring(dayIndex, slot);
+                    return !isSlotBookedFlexible(dateStr, start, end) && !isSlotBookedSpecial(dateStr, start, end) && !isSlotBookedRecurringOnDate(dateStr, start, end) && !isSlotBlocked(dateStr, start, end) && !isSlotBookedRecurring(dayIndex, slot);
                 });
 
                 if (isPast) {
@@ -658,6 +664,7 @@
             const dateStr = formatDateLagos(sessionDate);
             if (isSlotBookedFlexible(dateStr, slot.start_time, slot.end_time) ||
                 isSlotBookedSpecial(dateStr, slot.start_time, slot.end_time) ||
+                isSlotBookedRecurringOnDate(dateStr, slot.start_time, slot.end_time) ||
                 isSlotBlocked(dateStr, slot.start_time, slot.end_time)) {
                 return true;
             }
@@ -847,6 +854,7 @@
         const end = slot.end_time;
         return isSlotBookedFlexible(dateStr, start, end) ||
                isSlotBookedSpecial(dateStr, start, end) ||
+               isSlotBookedRecurringOnDate(dateStr, start, end) ||
                isSlotBlocked(dateStr, start, end) ||
                isSlotBookedRecurring(dayIndex, slot);
     }

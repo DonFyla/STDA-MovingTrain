@@ -510,7 +510,7 @@ class FlutterwaveWebhookTests(TestCase):
         self.assertEqual(response.status_code, 200)
         booking.refresh_from_db()
         self.assertEqual(booking.subscription_status, "cancelled")
-        self.assertEqual(booking.status, "cancelled")
+        self.assertEqual(booking.status, "confirmed")
 
 
 class SpecialBookingPaymentCallbackTests(TestCase):
@@ -842,7 +842,7 @@ class SubscriptionSyncTests(TestCase):
         ):
             return sync_subscriptions()
 
-    def test_cancelled_subscription_marks_booking_cancelled(self):
+    def test_cancelled_subscription_keeps_paid_booking_confirmed(self):
         result = self._sync(
             subscriptions=[
                 {
@@ -856,7 +856,7 @@ class SubscriptionSyncTests(TestCase):
         )
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.subscription_status, "cancelled")
-        self.assertEqual(self.booking.status, "cancelled")
+        self.assertEqual(self.booking.status, "confirmed")
         self.assertEqual(result["status_synced"], 1)
 
     def test_active_subscription_updates_stale_next_billing_date(self):

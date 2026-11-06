@@ -237,10 +237,12 @@ def flutterwave_webhook_view(request):
                     flutterwave_payment_plan_id=plan_id,
                     subscription_status="active",
                 )
+                from scheduling.recurring import align_booking_schedule
+
                 booking.subscription_status = "cancelled"
-                booking.status = "cancelled"
-                booking.save(update_fields=["subscription_status", "status"])
-                send_recurring_booking_cancelled(booking)
+                booking.save(update_fields=["subscription_status"])
+                align_booking_schedule(booking)
+                send_recurring_booking_cancelled(booking, subscription_only=True)
                 return JsonResponse({"status": "ok"})
             except Booking.DoesNotExist:
                 pass

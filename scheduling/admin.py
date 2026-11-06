@@ -74,9 +74,11 @@ class BookingAdmin(admin.ModelAdmin):
                 continue
 
             if result["success"]:
+                from scheduling.recurring import align_booking_schedule
+
                 booking.subscription_status = "cancelled"
-                booking.status = "cancelled"
-                booking.save(update_fields=["subscription_status", "status"])
+                booking.save(update_fields=["subscription_status"])
+                align_booking_schedule(booking)
                 cancelled += 1
             else:
                 self.message_user(

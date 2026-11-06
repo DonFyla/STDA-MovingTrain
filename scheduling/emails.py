@@ -85,16 +85,25 @@ def send_recurring_booking_confirmed(booking):
         )
 
 
-def send_recurring_booking_cancelled(booking):
-    """Notify student and coach when a recurring booking is cancelled or rejected."""
+def send_recurring_booking_cancelled(booking, subscription_only=False):
+    """Notify student and coach about a booking or subscription cancellation."""
     context = {
         "booking": booking,
         "student": booking.student_name,
         "coach": booking.coach,
+        "subscription_only": subscription_only,
     }
+    student_subject = (
+        "Your Subscription Has Been Cancelled"
+        if subscription_only else "Your Booking Has Been Cancelled"
+    )
+    coach_subject = (
+        f"Subscription Cancelled - {booking.student_name}"
+        if subscription_only else f"Booking Cancelled - {booking.student_name}"
+    )
 
     _send_email(
-        subject="Your Booking Has Been Cancelled",
+        subject=student_subject,
         to_emails=booking.student_email,
         template_name="emails/booking/recurring_cancelled_student.html",
         context=context,
@@ -102,7 +111,7 @@ def send_recurring_booking_cancelled(booking):
 
     if booking.coach.email:
         _send_email(
-            subject=f"Booking Cancelled - {booking.student_name}",
+            subject=coach_subject,
             to_emails=booking.coach.email,
             template_name="emails/booking/recurring_cancelled_coach.html",
             context=context,

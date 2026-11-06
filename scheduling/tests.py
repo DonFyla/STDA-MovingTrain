@@ -876,13 +876,13 @@ class BookingFlowTests(TestCase):
             subscription_status=subscription_status,
         )
 
-    def _future_points_form(self):
+    def _future_points_form(self, session_date="2026-02-16"):
         from .forms import PointsBookingForm
 
         return PointsBookingForm(
             data={
                 "selected_slots": json.dumps([{
-                    "date": "2026-02-16",
+                    "date": session_date,
                     "day_of_week": 1,
                     "start_time": "11:00",
                     "end_time": "12:00",
@@ -899,10 +899,44 @@ class BookingFlowTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("no longer available", str(form.errors))
 
+    def test_points_booking_rejects_remaining_paid_cancelled_session(self):
+        booking = self._create_recurring_reservation("cancelled")
+        booking.recurring_dates = [
+            {"date": "2026-02-16", "start_time": "11:00", "end_time": "12:00"}
+        ]
+        booking.payment_status = "paid"
+        booking.save(update_fields=["recurring_dates", "payment_status"])
+        form = self._future_points_form()
+        self.assertFalse(form.is_valid())
+        self.assertIn("no longer available", str(form.errors))
+
+    def test_points_booking_rejects_legacy_cancelled_booking_paid_session(self):
+        booking = self._create_recurring_reservation("cancelled")
+        booking.status = "cancelled"
+        booking.payment_status = "paid"
+        booking.recurring_dates = [
+            {"date": "2026-02-16", "start_time": "11:00", "end_time": "12:00"}
+        ]
+        booking.save(update_fields=["status", "payment_status", "recurring_dates"])
+        form = self._future_points_form()
+        self.assertFalse(form.is_valid())
+        self.assertIn("no longer available", str(form.errors))
+
     def test_points_booking_allows_cancelled_subscription_after_paid_sessions(self):
         self._create_recurring_reservation("cancelled")
         form = self._future_points_form()
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_booking_page_separates_cancelled_paid_dates_from_weekly_slots(self):
+        self._create_recurring_reservation("cancelled")
+        self.client.force_login(self.student_user)
+        response = self.client.get(reverse("scheduling:book_coach", args=[self.coach.id]))
+        weekly = json.loads(response.context["booked_slots_recurring_json"])
+        dated = json.loads(response.context["booked_slots_recurring_dates_json"])
+        self.assertNotIn("1", weekly)
+        self.assertEqual(
+            dated["2026-01-12"], [{"start": "11:00", "end": "12:00"}]
+        )
 
     def test_booking_page_exposes_flexible_booked_slots(self):
         FlexibleBooking.objects.create(
@@ -1156,26 +1190,33 @@ class SubscriptionCancellationTests(TestCase):
             password="testpass123",
         )
         self.coach = Coach.objects.create(name="Sub Coach", email="subcoach@example.com")
+        paid_session = timezone.now().date() + timedelta(days=7)
+        unpaid_session = paid_session + timedelta(weeks=5)
+        self.paid_session = paid_session.isoformat()
         self.booking = Booking.objects.create(
             coach=self.coach,
             student_name="Cancel Student",
             student_email="cancelsub@example.com",
-            booking_date=date(2030, 12, 25),
+            booking_date=paid_session,
             start_time=time(11, 0),
             end_time=time(12, 0),
-            recurring_days=[1],
-            recurring_dates=[{"date": "2030-12-25", "start_time": "11:00", "end_time": "12:00"}],
+            recurring_days=[(paid_session.weekday() + 1) % 7],
+            recurring_dates=[
+                {"date": self.paid_session, "start_time": "11:00", "end_time": "12:00"},
+                {"date": unpaid_session.isoformat(), "start_time": "11:00", "end_time": "12:00"},
+            ],
             sessions_per_month=4,
             monthly_amount=40000,
             flutterwave_payment_plan_id="3807",
             flutterwave_subscription_id="sub_123",
             payment_status="paid",
+            payment_date=timezone.now() - timedelta(days=10),
             status="confirmed",
             subscription_status="active",
         )
 
     @patch("scheduling.views.cancel_subscription")
-    def test_student_can_cancel_subscription(self, mock_cancel):
+    def test_student_cancels_billing_but_keeps_paid_classes(self, mock_cancel):
         mock_cancel.return_value = {"success": True, "message": "Cancelled"}
         self.client.force_login(self.student_user)
         response = self.client.post(
@@ -1184,7 +1225,45 @@ class SubscriptionCancellationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.subscription_status, "cancelled")
-        self.assertEqual(self.booking.status, "cancelled")
+        self.assertEqual(self.booking.status, "confirmed")
+        self.assertEqual(
+            [session["date"] for session in self.booking.recurring_dates],
+            [self.paid_session],
+        )
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(mail.outbox[0].subject, "Your Subscription Has Been Cancelled")
+        self.assertIn(
+            "Your current booked classes will still hold as scheduled.",
+            mail.outbox[0].body,
+        )
+        self.assertEqual(mail.outbox[1].subject, "Subscription Cancelled - Cancel Student")
+        self.assertIn(
+            "The student’s current booked classes will still hold as scheduled.",
+            mail.outbox[1].body,
+        )
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(len(dashboard.context["upcoming_sessions"]), 1)
+
+    @patch("payments.flutterwave_service.cancel_subscription")
+    def test_admin_subscription_cancellation_keeps_booking_confirmed(self, mock_cancel):
+        mock_cancel.return_value = {"success": True, "message": "Cancelled"}
+        admin = User.objects.create_superuser(
+            email="subadmin@example.com",
+            username="subadmin",
+            password="testpass123",
+        )
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("admin:scheduling_booking_changelist"),
+            {
+                "action": "cancel_selected_subscriptions",
+                "_selected_action": [str(self.booking.id)],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.subscription_status, "cancelled")
+        self.assertEqual(self.booking.status, "confirmed")
 
 
 class CoachBookingManagementTests(TestCase):
@@ -1952,6 +2031,7 @@ class SessionReminderTests(TestCase):
             end_time=end_time,
             status="confirmed",
             payment_status="paid",
+            subscription_status="cancelled",
             recurring_dates=[{
                 "date": self.local_now.date().isoformat(),
                 "start_time": start_time.strftime("%H:%M"),

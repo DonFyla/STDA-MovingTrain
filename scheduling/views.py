@@ -324,22 +324,42 @@ def book_coach_view(request, coach_id):
         slots_by_day[slot.day_of_week].append(slot)
     available_days = sorted(slots_by_day.keys())
 
-    # Existing recurring bookings for recurring tab
-    existing_recurring = coach.bookings.exclude(status__in=["rejected", "cancelled"])
+    # Active recurring bookings reserve their weekly slot. Cancelled
+    # subscriptions reserve only the paid sessions still in recurring_dates.
+    existing_recurring = coach.bookings.exclude(status="rejected")
     booked_slots_recurring = defaultdict(list)
+    booked_slots_recurring_dates = defaultdict(list)
     seen_recurring_slots = set()
+    seen_recurring_dates = set()
     for booking in existing_recurring:
+        legacy_cancelled = (
+            booking.status == "cancelled"
+            and booking.subscription_status == "cancelled"
+            and booking.payment_status == "paid"
+        )
+        if booking.status == "cancelled" and not legacy_cancelled:
+            continue
+        reserve_weekly = (
+            booking.status in ["pending", "confirmed"]
+            and booking.subscription_status not in ["cancelled", "expired"]
+        )
         for session in booking.recurring_dates or []:
             try:
                 session_date = dt_date.fromisoformat(session["date"])
             except (ValueError, TypeError):
                 continue
-            # Convert Python weekday (Mon=0) to JS weekday (Sun=0)
-            day = (session_date.weekday() + 1) % 7
             start = session.get("start_time")
             end = session.get("end_time")
             if not start or not end:
                 continue
+            date_key = session_date.isoformat()
+            if (date_key, start, end) not in seen_recurring_dates:
+                seen_recurring_dates.add((date_key, start, end))
+                booked_slots_recurring_dates[date_key].append({"start": start, "end": end})
+            if not reserve_weekly:
+                continue
+            # Convert Python weekday (Mon=0) to JS weekday (Sun=0)
+            day = (session_date.weekday() + 1) % 7
             key = (day, start, end)
             if key not in seen_recurring_slots:
                 seen_recurring_slots.add(key)
@@ -627,6 +647,7 @@ def book_coach_view(request, coach_id):
         "slots_by_day_json": json.dumps(slots_json),
         "available_days": available_days,
         "booked_slots_recurring_json": json.dumps(booked_recurring_json),
+        "booked_slots_recurring_dates_json": json.dumps(booked_slots_recurring_dates),
         "booked_slots_flexible_json": json.dumps(booked_slots_flexible),
         "booked_slots_special_json": json.dumps(booked_slots_special),
         "blocked_dates_json": json.dumps(blocked_dates_json),
@@ -753,10 +774,12 @@ def cancel_subscription_view(request, booking_id):
         result = cancel_payment_plan(booking.flutterwave_payment_plan_id)
 
     if result["success"]:
+        from .recurring import align_booking_schedule
+
         booking.subscription_status = "cancelled"
-        booking.status = "cancelled"
-        booking.save(update_fields=["subscription_status", "status"])
-        send_recurring_booking_cancelled(booking)
+        booking.save(update_fields=["subscription_status"])
+        align_booking_schedule(booking)
+        send_recurring_booking_cancelled(booking, subscription_only=True)
         messages.success(request, "Your subscription has been cancelled.")
     else:
         messages.error(
