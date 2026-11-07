@@ -979,6 +979,11 @@ class BookingFlowTests(TestCase):
         subjects = [m.subject for m in mail.outbox]
         self.assertIn("Your Booking is Reserved! Complete Payment to Confirm", subjects)
         self.assertIn("New Booking - Booking Student (Pending Payment)", subjects)
+        coach_message = next(message for message in mail.outbox if message.to == [self.coach.email])
+        coach_html = coach_message.alternatives[0][0]
+        self.assertNotIn("Monthly Amount:", coach_html)
+        self.assertNotIn("Reference:", coach_html)
+        self.assertNotIn("₦40,000", coach_html)
 
 
 class BookingPaymentTests(TestCase):
@@ -1620,6 +1625,14 @@ class SpecialBookingFlowTests(TestCase):
         subjects = [m.subject for m in mail.outbox]
         self.assertIn("Your Special Coaching Booking is Reserved! Complete Payment to Confirm", subjects)
         self.assertIn("New Special Booking - Test Student (Pending Payment)", subjects)
+        coach_message = next(
+            message for message in mail.outbox if message.to == [self.special_coach.email]
+        )
+        coach_html = coach_message.alternatives[0][0]
+        self.assertNotIn("Hourly Rate:", coach_html)
+        self.assertNotIn("Total Amount:", coach_html)
+        self.assertNotIn("Reference:", coach_html)
+        self.assertNotIn("₦", coach_html)
 
     @patch("scheduling.views.initialize_transaction", side_effect=_mock_initialize_success)
     def test_special_booking_creation_multiple_sessions(self, mock_init):

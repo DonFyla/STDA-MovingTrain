@@ -12,9 +12,6 @@
     <p><strong>Email:</strong> {{ booking.student_email }}</p>
     <p><strong>Phone:</strong> {{ booking.student_phone|default:"Not provided" }}</p>
     <p><strong>Total Sessions:</strong> {{ booking.total_sessions }}</p>
-    <p><strong>Hourly Rate:</strong> ₦{{ booking.hourly_rate|intcomma }}</p>
-    <p><strong>Amount Paid:</strong> ₦{{ booking.total_amount|intcomma }}</p>
-    <p><strong>Reference:</strong> {{ booking.payment_reference|default:booking.id }}</p>
 
     <h4 style="color: #5E5044; margin-bottom: 8px;">Scheduled Dates</h4>
     <ul style="margin: 0; padding-left: 20px; color: #5E5044;">

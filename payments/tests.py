@@ -558,6 +558,14 @@ class SpecialBookingPaymentCallbackTests(TestCase):
         subjects = [m.subject for m in mail.outbox]
         self.assertIn("Payment Received! Your Special Coaching is Confirmed", subjects)
         self.assertIn(f"Special Booking Confirmed - {self.booking.student_name}", subjects)
+        coach_message = next(
+            message for message in mail.outbox if message.to == [self.coach.email]
+        )
+        coach_html = coach_message.alternatives[0][0]
+        self.assertNotIn("Hourly Rate:", coach_html)
+        self.assertNotIn("Amount Paid:", coach_html)
+        self.assertNotIn("Reference:", coach_html)
+        self.assertNotIn("₦", coach_html)
 
     @patch("payments.views.verify_transaction")
     def test_special_booking_callback_shows_error_on_failure(self, mock_verify):
