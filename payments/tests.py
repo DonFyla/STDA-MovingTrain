@@ -110,6 +110,7 @@ class FlutterwaveCallbackTests(TestCase):
         self.assertEqual(mail.outbox[0].subject, "Your Points Purchase is Confirmed")
 
     @override_settings(
+        GOOGLE_ANALYTICS_ID="G-123456789",
         GOOGLE_ADS_CONVERSION_ID="AW-123456789",
         GOOGLE_ADS_CONVERSION_LABEL="purchase_label",
     )
@@ -133,11 +134,24 @@ class FlutterwaveCallbackTests(TestCase):
         self.assertContains(response, "'value': 38000.00")
         self.assertContains(response, "'currency': 'NGN'")
         self.assertContains(response, f"'transaction_id': '{escapejs('FLT-CALLBACK-123')}'")
+        self.assertContains(response, "gtag('event', 'purchase'")
+        self.assertContains(response, f"'send_to': '{escapejs('G-123456789')}'")
+        self.assertContains(response, f"'item_id': '{escapejs(f'points-{self.tx.id}')}'")
+        self.assertContains(response, "'item_name': '4 Coaching Points'")
+        self.assertContains(response, "'price': 38000.00")
+        self.assertContains(response, "'quantity': 1")
+        self.tx.refresh_from_db()
+        self.assertIsNotNone(self.tx.analytics_tracked_at)
 
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertNotContains(response, "gtag('event', 'conversion'")
+        self.assertNotContains(response, "gtag('event', 'purchase'")
 
-    @override_settings(GOOGLE_ADS_CONVERSION_ID="", GOOGLE_ADS_CONVERSION_LABEL="")
+    @override_settings(
+        GOOGLE_ANALYTICS_ID="",
+        GOOGLE_ADS_CONVERSION_ID="",
+        GOOGLE_ADS_CONVERSION_LABEL="",
+    )
     @patch("payments.views.verify_transaction")
     def test_points_purchase_does_not_track_without_ads_configuration(self, mock_verify):
         mock_verify.return_value = {
@@ -154,6 +168,9 @@ class FlutterwaveCallbackTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "gtag('event', 'conversion'")
+        self.assertNotContains(response, "gtag('event', 'purchase'")
+        self.tx.refresh_from_db()
+        self.assertIsNone(self.tx.analytics_tracked_at)
 
     @patch("payments.views.verify_transaction")
     def test_callback_shows_error_on_failure(self, mock_verify):

@@ -64,6 +64,7 @@ class PointTransaction(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="completed"
     )
+    analytics_tracked_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

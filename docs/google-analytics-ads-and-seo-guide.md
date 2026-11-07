@@ -40,14 +40,11 @@ The project already contains the required integration points:
 - `web/context_processors.py` exposes these values to templates.
 - `templates/base.html` loads GA4 when `GOOGLE_ANALYTICS_ID` is configured and Google Tag Manager is not being used.
 - `templates/base.html` loads the Google Ads library when `GOOGLE_ADS_CONVERSION_ID` is configured.
-- Recurring and special booking confirmation pages send a purchase conversion only when:
-  - `payment_status` is `paid`;
-  - the logged-in viewer is the student; and
-  - both Ads conversion settings are present.
-- Successful points purchases send the same conversion when the student reaches the dashboard after payment. The verified amount is carried through the server-side session and the event is consumed once.
-- The purchase event contains the amount, `NGN`, and a stable transaction reference. Pending payments and coach/staff page views do not fire it.
-
-The current purchase event is for **Google Ads**. Configuring GA4 will provide general visitor analytics, but it will not automatically create a separate GA4 ecommerce `purchase` event. That can be added later if GA4 monetization reports are required.
+- Recurring and special booking confirmation pages send purchase events only when `payment_status` is `paid` and the logged-in viewer is the student.
+- Successful points purchases send the same events when the student reaches the dashboard after payment. The verified amount and completed transaction ID are carried through the server-side session.
+- The Google Ads `conversion` event requires both Ads conversion settings. The separate GA4 `purchase` event requires `GOOGLE_ANALYTICS_ID` and includes one ecommerce item.
+- Both events contain the amount, `NGN`, and a stable transaction reference. Pending payments and coach/staff page views do not fire them.
+- An `analytics_tracked_at` timestamp on the booking or point transaction ensures that each payment is emitted at most once, even if the confirmation page is refreshed or opened again later.
 
 ---
 
@@ -156,7 +153,7 @@ Do not create a second purchase conversion for the same action unless there is a
 
 5. Confirm that the website and Nginx remain healthy.
 
-No CSS build, database migration, or new Python package is required for this configuration.
+Changing only these environment values requires no CSS build, database migration, or new Python package. Deploying the GA4 purchase implementation itself does require applying the `scheduling/0011` and `payments/0003` migrations before serving the updated views.
 
 ---
 
@@ -194,9 +191,13 @@ Realtime data can appear quickly, but standard GA4 reports can take longer to up
 
 Ads conversion reports may take several hours, and sometimes up to a day, to reflect a conversion. Do not treat an immediate empty report as proof that tracking failed.
 
-### 7.4 Optional: GA4 ecommerce purchases
+### 7.4 Verify GA4 ecommerce purchases
 
-If purchase revenue must also appear in GA4 monetization reports, add a separate GA4 `purchase` event with its own tests. Avoid importing that GA4 purchase into Google Ads while also using the direct Ads purchase conversion as a primary bidding goal, or purchases may be counted twice.
+The same eligible payment paths send a separate GA4 `purchase` event with the transaction reference, NGN value, and one ecommerce item. In Tag Assistant or GA4 DebugView, confirm that this event is sent to the `G-...` measurement ID. GA4 standard reports may take longer to update than Realtime reports.
+
+Each payment is claimed once using its database `analytics_tracked_at` field, so refreshing or revisiting a confirmation page must not emit another purchase. Google Ads and GA4 use different attribution models, so their totals will not necessarily match.
+
+Avoid importing the GA4 purchase into Google Ads while also using the direct Ads purchase conversion as a primary bidding goal, or purchases may be counted twice.
 
 ---
 

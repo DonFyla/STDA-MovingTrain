@@ -1132,6 +1132,38 @@ class GoogleAdsConversionTests(TestCase):
         self.assertContains(response, "'currency': 'NGN'")
         self.assertContains(response, f"'transaction_id': '{escapejs('BK-ADS-123')}'")
 
+    @override_settings(GOOGLE_ANALYTICS_ID="G-123456789")
+    def test_paid_recurring_booking_emits_ga4_purchase_once(self):
+        self.client.force_login(self.student)
+        response = self.client.get(self.booking_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "gtag('event', 'purchase'")
+        self.assertContains(response, f"'send_to': '{escapejs('G-123456789')}'")
+        self.assertContains(response, f"'transaction_id': '{escapejs('BK-ADS-123')}'")
+        self.assertContains(response, "'value': 39500.00")
+        self.assertContains(response, "'currency': 'NGN'")
+        self.assertContains(response, f"'item_id': '{escapejs(f'recurring-{self.booking.id}')}'")
+        self.assertContains(response, "'item_name': 'Monthly Chess Coaching'")
+        self.assertContains(response, "'price': 39500.00")
+        self.assertContains(response, "'quantity': 1")
+        self.booking.refresh_from_db()
+        self.assertIsNotNone(self.booking.analytics_tracked_at)
+
+        response = self.client.get(self.booking_url)
+        self.assertNotContains(response, "gtag('event', 'conversion'")
+        self.assertNotContains(response, "gtag('event', 'purchase'")
+
+    @override_settings(GOOGLE_ANALYTICS_ID="G-123456789")
+    def test_paid_special_booking_emits_ga4_purchase(self):
+        self.client.force_login(self.student)
+        response = self.client.get(self.special_url)
+        self.assertContains(response, "gtag('event', 'purchase'")
+        self.assertContains(response, f"'item_id': '{escapejs(f'special-{self.special_booking.id}')}'")
+        self.assertContains(response, "'item_name': 'Special Chess Coaching'")
+        self.assertContains(response, "'price': 15000.00")
+        self.special_booking.refresh_from_db()
+        self.assertIsNotNone(self.special_booking.analytics_tracked_at)
+
     def test_paid_special_booking_emits_purchase_conversion(self):
         self.client.force_login(self.student)
         response = self.client.get(self.special_url)
@@ -1152,6 +1184,10 @@ class GoogleAdsConversionTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
                 self.assertNotContains(response, "gtag('event', 'conversion'")
+        self.booking.refresh_from_db()
+        self.special_booking.refresh_from_db()
+        self.assertIsNone(self.booking.analytics_tracked_at)
+        self.assertIsNone(self.special_booking.analytics_tracked_at)
 
     def test_coach_and_staff_views_do_not_emit_conversion(self):
         staff = User.objects.create_user(
@@ -1168,6 +1204,10 @@ class GoogleAdsConversionTests(TestCase):
                     response = self.client.get(url)
                     self.assertEqual(response.status_code, 200)
                     self.assertNotContains(response, "gtag('event', 'conversion'")
+        self.booking.refresh_from_db()
+        self.special_booking.refresh_from_db()
+        self.assertIsNone(self.booking.analytics_tracked_at)
+        self.assertIsNone(self.special_booking.analytics_tracked_at)
 
     def test_missing_ads_configuration_suppresses_conversion(self):
         self.client.force_login(self.student)
@@ -1176,6 +1216,8 @@ class GoogleAdsConversionTests(TestCase):
                 response = self.client.get(self.booking_url)
                 self.assertEqual(response.status_code, 200)
                 self.assertNotContains(response, "gtag('event', 'conversion'")
+        self.booking.refresh_from_db()
+        self.assertIsNone(self.booking.analytics_tracked_at)
 
     def test_recurring_conversion_uses_fallback_amount_and_transaction_id(self):
         self.booking.payment_amount = None

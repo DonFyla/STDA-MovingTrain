@@ -1,10 +1,26 @@
-{% if google_ads_conversion and GOOGLE_ADS_CONVERSION_ID and GOOGLE_ADS_CONVERSION_LABEL %}
+{% if google_ads_conversion %}
 <script>
+  {% if GOOGLE_ADS_CONVERSION_ID and GOOGLE_ADS_CONVERSION_LABEL %}
   gtag('event', 'conversion', {
     'send_to': '{{ GOOGLE_ADS_CONVERSION_ID|escapejs }}/{{ GOOGLE_ADS_CONVERSION_LABEL|escapejs }}',
     'value': {{ google_ads_conversion.value|floatformat:2 }},
     'currency': '{{ google_ads_conversion.currency|escapejs }}',
     'transaction_id': '{{ google_ads_conversion.transaction_id|escapejs }}'
   });
+  {% endif %}
+  {% if GOOGLE_ANALYTICS_ID %}
+  gtag('event', 'purchase', {
+    'send_to': '{{ GOOGLE_ANALYTICS_ID|escapejs }}',
+    'transaction_id': '{{ google_ads_conversion.transaction_id|escapejs }}',
+    'value': {{ google_ads_conversion.value|floatformat:2 }},
+    'currency': '{{ google_ads_conversion.currency|escapejs }}',
+    'items': [{
+      'item_id': '{{ google_ads_conversion.item_id|escapejs }}',
+      'item_name': '{{ google_ads_conversion.item_name|escapejs }}',
+      'price': {{ google_ads_conversion.value|floatformat:2 }},
+      'quantity': 1
+    }]
+  });
+  {% endif %}
 </script>
 {% endif %}

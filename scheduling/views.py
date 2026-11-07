@@ -29,6 +29,7 @@ from .emails import (
     send_flexible_booking_created,
     send_special_booking_created,
 )
+from web.analytics import claim_purchase_tracking
 from payments.flutterwave_service import (
     generate_reference,
     initialize_transaction,
@@ -802,11 +803,15 @@ def booking_confirmation_view(request, booking_id):
         raise PermissionDenied
     context = {"booking": booking}
     if booking.payment_status == "paid" and booking.student_email == request.user.email:
-        context["google_ads_conversion"] = {
-            "value": booking.payment_amount or booking.monthly_amount,
-            "currency": "NGN",
-            "transaction_id": booking.payment_reference or str(booking.id),
-        }
+        context.update(
+            claim_purchase_tracking(
+                booking,
+                value=booking.payment_amount or booking.monthly_amount,
+                transaction_id=booking.payment_reference or str(booking.id),
+                item_id=f"recurring-{booking.id}",
+                item_name="Monthly Chess Coaching",
+            )
+        )
     return render(request, "scheduling/booking_confirmation.html", context)
 
 
@@ -836,11 +841,15 @@ def special_booking_confirmation_view(request, booking_id):
     context = {"booking": booking}
     is_student = booking.student == request.user or booking.student_email == request.user.email
     if booking.payment_status == "paid" and is_student:
-        context["google_ads_conversion"] = {
-            "value": booking.payment_amount or booking.total_amount,
-            "currency": "NGN",
-            "transaction_id": booking.payment_reference or str(booking.id),
-        }
+        context.update(
+            claim_purchase_tracking(
+                booking,
+                value=booking.payment_amount or booking.total_amount,
+                transaction_id=booking.payment_reference or str(booking.id),
+                item_id=f"special-{booking.id}",
+                item_name="Special Chess Coaching",
+            )
+        )
     return render(request, "scheduling/special_booking_confirmation.html", context)
 
 

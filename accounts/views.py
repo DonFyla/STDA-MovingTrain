@@ -256,7 +256,18 @@ def dashboard_view(request):
     }
     points_purchase = request.session.pop("points_purchase_conversion", None)
     if points_purchase:
-        context["google_ads_conversion"] = points_purchase
+        from payments.models import PointTransaction
+        from web.analytics import claim_purchase_tracking
+
+        transaction_pk = points_purchase.pop("transaction_pk", None)
+        tx = PointTransaction.objects.filter(
+            pk=transaction_pk,
+            user=user,
+            type="purchase",
+            status="completed",
+        ).first()
+        if tx:
+            context.update(claim_purchase_tracking(tx, **points_purchase))
     return render(request, "accounts/dashboard_student.html", context)
 
 

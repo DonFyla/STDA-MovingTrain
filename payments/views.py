@@ -175,9 +175,11 @@ def flutterwave_callback_view(request):
             package = next((p for p in POINT_PACKAGES if p["points"] == tx.amount), None)
             payment_amount = package["price"] if package else tx.amount * PRICE_PER_POINT
         request.session["points_purchase_conversion"] = {
+            "transaction_pk": str(tx.id),
             "value": str(payment_amount),
-            "currency": "NGN",
             "transaction_id": tx.payment_reference or str(tx.id),
+            "item_id": f"points-{tx.id}",
+            "item_name": f"{tx.amount} Coaching Points",
         }
         messages.success(
             request,
